@@ -1,0 +1,16 @@
+[project]
+name = "opt-rag"
+version = "0.1.0"
+description = "Minimal RAG pipeline over Supabase pgvector with Gemini"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
