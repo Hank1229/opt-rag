@@ -5,6 +5,7 @@ description = "Minimal RAG pipeline over Supabase pgvector with Gemini"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "fastapi",
+    "httpx>=0.28.1",
     "uvicorn[standard]",
 ]
 

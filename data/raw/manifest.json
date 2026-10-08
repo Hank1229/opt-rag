@@ -1,0 +1,144 @@
+{
+  "ecfr_issue_date": "2026-10-01",
+  "entries": [
+    {
+      "tier": 1,
+      "url": "https://www.ecfr.gov/api/versioner/v1/full/2026-10-01/title-8.xml?chapter=I&subchapter=B&part=214&section=214.2",
+      "final_url": "https://www.ecfr.gov/api/versioner/v1/full/2026-10-01/title-8.xml?chapter=I&subchapter=B&part=214&section=214.2",
+      "path": "ecfr/8-cfr-214.2.xml",
+      "fetched_at": "2026-10-07T05:54:14Z",
+      "bytes": 747126,
+      "raw_sha256": "673bc9721fd2fd0553ca1ca8185d67c3893e31005ee026c2fa521158ad3097b8"
+    },
+    {
+      "tier": 2,
+      "url": "https://studyinthestates.dhs.gov/students/work/applying-for-practical-training",
+      "final_url": "https://studyinthestates.dhs.gov/students/work/applying-for-practical-training",
+      "path": "sits/applying-for-practical-training.html",
+      "fetched_at": "2026-10-07T05:54:12Z",
+      "bytes": 100627,
+      "raw_sha256": "d616480e7c5216f26fca43385fe3ed3e7466a9c05ea4dbf4b64e4e6991af45b2",
+      "content_sha256": "391a2972e6efd1a05ee56347bc22a57b69bffb43cdcde8a0e287f1ae9594f9b7"
+    },
+    {
+      "tier": 2,
+      "url": "https://studyinthestates.dhs.gov/stem-opt-hub/additional-resources/form-i-983-overview",
+      "final_url": "https://studyinthestates.dhs.gov/stem-opt-hub/additional-resources/form-i-983-overview",
+      "path": "sits/form-i-983-overview.html",
+      "fetched_at": "2026-10-07T05:54:12Z",
+      "bytes": 82259,
+      "raw_sha256": "e4cf0d3be9a2c6ef7c728a66ff45dc87ff624d84f550b96fa3c916d44f615bfb",
+      "content_sha256": "e9202f31b91d5bbdccdfb5c4d29a7d579f873ef3bd6de05b742cd5141491c91f"
+    },
+    {
+      "tier": 2,
+      "url": "https://studyinthestates.dhs.gov/students/study/full-course-of-study",
+      "final_url": "https://studyinthestates.dhs.gov/students/study/full-course-of-study",
+      "path": "sits/full-course-of-study.html",
+      "fetched_at": "2026-10-07T05:54:12Z",
+      "bytes": 88621,
+      "raw_sha256": "9b64ca37bc42266d197df14efabd62ebefa335c6e8d9d7c6d7bcb167f087a259",
+      "content_sha256": "d236623a426aa9fcd388e2e3c60fd3fdb8de4346d300f50022f03f11f6b18340"
+    },
+    {
+      "tier": 2,
+      "url": "https://studyinthestates.dhs.gov/students/complete/h-1b-status-and-the-cap-gap-extension",
+      "final_url": "https://studyinthestates.dhs.gov/students/complete/h-1b-status-and-the-cap-gap-extension",
+      "path": "sits/h-1b-status-and-the-cap-gap-extension.html",
+      "fetched_at": "2026-10-07T05:54:12Z",
+      "bytes": 97484,
+      "raw_sha256": "0e08894ba6badab627594f5c0a719b6c0131c04ac971d091b0486463318703a7",
+      "content_sha256": "396673fe502b9406d9a8aa4796161c1522266f82150f93a79793fd72adcd6601"
+    },
+    {
+      "tier": 2,
+      "url": "https://studyinthestates.dhs.gov/students/maintaining-status",
+      "final_url": "https://studyinthestates.dhs.gov/students/maintaining-status",
+      "path": "sits/maintaining-status.html",
+      "fetched_at": "2026-10-07T05:54:12Z",
+      "bytes": 88363,
+      "raw_sha256": "c330267eec22cbadcff46f45da19efc3cf75bb312f2e0e1bc6df151c7f847f69",
+      "content_sha256": "7f5a542501673be9fde766e6000598f85ca4cc485ca017df474f8edaaf89a22a"
+    },
+    {
+      "tier": 2,
+      "url": "https://studyinthestates.dhs.gov/stem-opt-hub/additional-resources/stem-opt-extension-overview",
+      "final_url": "https://studyinthestates.dhs.gov/stem-opt-hub/additional-resources/stem-opt-extension-overview",
+      "path": "sits/stem-opt-extension-overview.html",
+      "fetched_at": "2026-10-07T05:54:12Z",
+      "bytes": 83737,
+      "raw_sha256": "c41ba6bd78868932e500e0ab22aa07573f816aedfd346eb79ee7c60131a8b0b5",
+      "content_sha256": "70125bffb75a3f05e2b255bb563dccbda935353b00cdc9ad02c5ea0b25229c61"
+    },
+    {
+      "tier": 2,
+      "url": "https://studyinthestates.dhs.gov/stem-opt-hub/additional-resources/stem-opt-frequently-asked-questions",
+      "final_url": "https://studyinthestates.dhs.gov/stem-opt-hub/additional-resources/stem-opt-frequently-asked-questions",
+      "path": "sits/stem-opt-frequently-asked-questions.html",
+      "fetched_at": "2026-10-07T05:54:12Z",
+      "bytes": 87811,
+      "raw_sha256": "16941050bdcea5b9d0806b9f8bdbb304b16ee6b356f62cf63e4721ad852342e6",
+      "content_sha256": "47eb1732434a8624c4b1c2bb78e6967fb2571d2c01f2b55b70a91ad4fe4b48fe"
+    },
+    {
+      "tier": 2,
+      "url": "https://studyinthestates.dhs.gov/stem-opt-hub/for-students/students-and-the-form-i-983",
+      "final_url": "https://studyinthestates.dhs.gov/stem-opt-hub/for-students/students-and-the-form-i-983",
+      "path": "sits/students-and-the-form-i-983.html",
+      "fetched_at": "2026-10-07T05:54:12Z",
+      "bytes": 86230,
+      "raw_sha256": "208ff5082721c162cf98107456e1157d8372d61456369a60b5d560e2bb9d7f32",
+      "content_sha256": "aed5682164f60546d6c3256e6749ce11b31a99b66eae162b69f89bfc4da078ee"
+    },
+    {
+      "tier": 2,
+      "url": "https://studyinthestates.dhs.gov/stem-opt-hub/for-students/students-determining-stem-opt-extension-eligibility",
+      "final_url": "https://studyinthestates.dhs.gov/stem-opt-hub/for-students/students-determining-stem-opt-extension-eligibility",
+      "path": "sits/students-determining-stem-opt-extension-eligibility.html",
+      "fetched_at": "2026-10-07T05:54:12Z",
+      "bytes": 80009,
+      "raw_sha256": "5a2fb0df87cf1e8aef809754e3c639ecaf9f7b5f481cbe913b1289ea4739b9fc",
+      "content_sha256": "71fcaf3e2459634770b42cb8bc700aeead38df8788382cc85ffd463675e56431"
+    },
+    {
+      "tier": 2,
+      "url": "https://studyinthestates.dhs.gov/stem-opt-hub/for-students/students-stem-opt-reporting-requirements",
+      "final_url": "https://studyinthestates.dhs.gov/stem-opt-hub/for-students/students-stem-opt-reporting-requirements",
+      "path": "sits/students-stem-opt-reporting-requirements.html",
+      "fetched_at": "2026-10-07T05:54:12Z",
+      "bytes": 85783,
+      "raw_sha256": "abe6d2bb7f175c366695a88ea80e0d644cef4074acde779f70d0b7091fc8a6e1",
+      "content_sha256": "910f4cc80772702c7ddda64e4b490a71b2c860d09ec4ed4a4cf6a89c56313416"
+    },
+    {
+      "tier": 2,
+      "url": "https://studyinthestates.dhs.gov/students/training-opportunities-in-the-united-states",
+      "final_url": "https://studyinthestates.dhs.gov/students/training-opportunities-in-the-united-states",
+      "path": "sits/training-opportunities-in-the-united-states.html",
+      "fetched_at": "2026-10-07T05:54:12Z",
+      "bytes": 87141,
+      "raw_sha256": "28cce8d969395a155ba61ea84d0b34ad1e3b8075564873a107fbfe0fc61f6488",
+      "content_sha256": "8ee85908ea1c5a9f7b22789b71e689e84a3d8df283f040e467af1dc4bf280d21"
+    },
+    {
+      "tier": 2,
+      "url": "https://studyinthestates.dhs.gov/students/study/traveling-as-an-f-or-m-student",
+      "final_url": "https://studyinthestates.dhs.gov/students/study/traveling-as-an-f-or-m-student",
+      "path": "sits/traveling-as-an-f-or-m-student.html",
+      "fetched_at": "2026-10-07T05:54:12Z",
+      "bytes": 83705,
+      "raw_sha256": "df00a55d3f579f9105b7ba46cdadd40ccb62b026ee803170598d92374d4eb807",
+      "content_sha256": "4713f651ff5aa5c4609f2aa69768b40d1535731b1a0f0fa03931c5dac321c091"
+    },
+    {
+      "tier": 2,
+      "url": "https://studyinthestates.dhs.gov/students/work/working-in-the-united-states",
+      "final_url": "https://studyinthestates.dhs.gov/students/work/working-in-the-united-states",
+      "path": "sits/working-in-the-united-states.html",
+      "fetched_at": "2026-10-07T05:54:12Z",
+      "bytes": 84693,
+      "raw_sha256": "bb5ce5ab327219b4d5d746b07d3b40ffd4630fad26ab1cc7f1be750bf2a507e0",
+      "content_sha256": "5f019e7e98f216238250617d71bbe15d92ba6aff45d7a17dd4d8a47731b6e49a"
+    }
+  ]
+}
