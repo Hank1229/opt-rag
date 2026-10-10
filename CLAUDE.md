@@ -14,8 +14,9 @@ Ragas + Langfuse + Next.js frontend. Deploy: Fly.io/Railway + Vercel.
 
 - Corpus: two tiers. Tier 1 = full 8 CFR 214.2(f) via eCFR API.
   Tier 2 = Study in the States student pages from a fixed URL list.
-  Fetch script + manifest (url, fetched_at, content hash), raw files
-  in data/raw/, committed.
+  Fetch scripts + manifest (per file: tier, url, final_url, path,
+  fetched_at, bytes, raw_sha256, plus content_sha256 for Tier 2;
+  top level: ecfr_issue_date), raw files in data/raw/, committed.
 - Chunking: structure-aware. Tier 1 splits on paragraph hierarchy,
   paragraph ID in metadata as citation key. Tier 2 splits on h2/h3.
   Paragraphs over ~800 tokens fall back to fixed-size splits keeping
@@ -23,12 +24,16 @@ Ragas + Langfuse + Next.js frontend. Deploy: Fly.io/Railway + Vercel.
 - Embedding: Gemini, truncated to 768 dims (MRL). Cosine distance,
   vector_cosine_ops.
 - Retrieval: top-k = 5 baseline.
+- Query endpoint: /query (the name used in code, docs, and diagrams).
 - Generation prompt: labeled sources, mandatory citations, refusal
   when context lacks the answer, fixed non-legal-advice disclaimer,
   English-only answers.
-- Eval dataset: LLM drafts candidates, Hank verifies every citation
-  by hand, then the set freezes. Frozen set never changes; if it must,
-  the baseline is void and reruns.
+- Eval dataset: Hank writes every question by hand, seeded from real
+  student questions, including refusal questions and paired neutral /
+  preference-leading questions. An LLM may draft reference answers and
+  citations; Hank verifies each against the source, then the set
+  freezes. Frozen set never changes; if it must, the baseline is void
+  and reruns.
 
 ## Working rules
 
@@ -39,11 +44,14 @@ Ragas + Langfuse + Next.js frontend. Deploy: Fly.io/Railway + Vercel.
   prompt change.
 - Do not install packages, create databases, or add schema fields
   beyond what the current step needs.
-- Do not generate eval questions or ground truths on your own
-  initiative. Drafting happens only when Hank explicitly asks, in the
-  format: question + short answer + verbatim source quote + citation.
+- Never write eval questions. Draft reference answers and citations
+  only when Hank explicitly asks, for questions he wrote, in the
+  format: short answer + verbatim source quote + citation.
 - After any decision-level discussion, output a DECISIONS.md entry:
   Decision / Rejected alternatives / Rationale / Date.
+- Any report, plan, or summary longer than a screen goes into a Claude
+  Doc; give Hank the link instead of pasting it in the terminal. If
+  Claude Docs is unavailable, write it to /tmp/<topic>.md and say so.
 - All files, comments, and docs in English.
 - Code comments: file header states what the file does, important
   functions get one brief line, skip comments that restate the code.
@@ -51,5 +59,6 @@ Ragas + Langfuse + Next.js frontend. Deploy: Fly.io/Railway + Vercel.
 ## Current state
 
 - Skeleton done: uv, FastAPI /health, .env.example, first commit made.
-- Next: fetch scripts for the two corpus tiers, then Supabase schema,
-  then ingest.
+- Fetch scripts and raw corpus snapshot done (eCFR 8 CFR 214.2 at
+  issue date 2026-10-01, 13 Study in the States pages).
+- Next: Supabase schema, then ingest.
