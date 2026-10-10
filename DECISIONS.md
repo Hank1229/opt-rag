@@ -59,3 +59,28 @@ alternatives and rationale. Newest entries at the bottom.
 **Decision**: Python pinned to uv-managed 3.12.14 via .python-version. httpx as the HTTP client. fetch_sits.py writes files only after all 13 pages succeed.
 **Rejected alternatives**: python.org Python 3.12.5 (its OpenSSL 3.0.13 TLS fingerprint gets HTTP 403 from the site's Akamai CDN on every Tier 2 page); urllib from the standard library (manual gzip decoding); writing each page as soon as it arrives (a mid-run failure would leave a half-updated corpus)
 **Rationale**: Reproducible fetches need both a working TLS stack and all-or-nothing writes.
+
+## 2026-10-08 Gold set authorship split
+
+**Amends**: [2026-09-01 Gold dataset workflow (rule change)](#2026-09-01-gold-dataset-workflow-rule-change). That entry stays as the record of the earlier rule; where the two differ, this entry applies.
+**Decision**: I write every question by hand, seeded from OPT questions my classmates and I have actually asked. Refusal questions and the paired neutral / preference-leading questions are also written entirely by hand. An LLM may draft the reference answer and citation for each question; I verify every draft against the source text before the set freezes.
+**Rejected alternatives**: LLM drafts the full candidate including the question (the 2026-09-01 rule; question wording drifts toward the model's own phrasing and topic choice drifts toward easily retrieved paragraphs); fully hand-written including reference answers (answer drafting is the most time-consuming part, and per-item verification already keeps its bias in check)
+**Rationale**: Dataset bias enters mainly through the questions: wording that matches the model's phrasing, and topics that favor paragraphs that are easy to retrieve. Real questions from real students avoid both. Reference answers take the most time to write, and verifying each draft against the source keeps LLM drafting bias under control.
+
+## 2026-10-08 Processing time data: one-time snapshot
+
+**Decision**: Processing time data is fetched once, the same way as the corpus: record the fetch date and a content hash, and commit the snapshot to the repo. No scheduled fetching. The data stays out of the v1 index, and the fetch is deferred until a step actually needs it. Processing-time questions in the gold set are refusal items. Continuous monitoring is listed as future work in the README.
+**Rejected alternatives**: scheduled fetching from the start of the project to build a history (a 14-day window cannot accumulate a meaningful history, and a scheduler adds infrastructure that serves neither retrieval nor eval)
+**Rationale**: A one-time snapshot is versioned and reproducible like the corpus, at near-zero cost. Monitoring over time is a product feature the eval story does not depend on.
+
+## 2026-10-08 Product scope: no pivot
+
+**Decision**: opt-rag stays a RAG QA system over F-1/OPT regulations; the project description in CLAUDE.md is unchanged. A deterministic OPT/STEM timeline calculator is a stretch goal: built only if there is slack after the first version ships, otherwise listed as future work. My own OPT application delay is used only in the README motivation section and as a gold set question category. "RAG has no advantage over a bare LLM on public data" is treated as a hypothesis to test, not a conclusion.
+**Rejected alternatives**: pivoting to an OPT/STEM timeline calculator and scenario-comparison tool (moves the center of the project away from retrieval and eval; the date engine alone was budgeted at up to 1.5 days); switching to a different domain (rebuilds the corpus and dataset without saving time)
+**Rationale**: The project exists to prove hands-on RAG skill, which is judged on retrieval quality and eval rigor rather than product novelty. A fixed scope protects the days the experiments need. Treating the no-advantage claim as a hypothesis turns it into something the eval can measure (see the baseline comparison entry below).
+
+## 2026-10-08 Baseline comparison: bare Gemini vs opt-rag
+
+**Decision**: Run the same frozen gold set through bare Gemini and through opt-rag. Bare Gemini gets the same generation prompt as opt-rag (cite paragraph numbers, refuse when unsure) minus the retrieved context, so retrieval is the only difference between the two arms. Ragas metrics: Faithfulness, Context recall, Factual correctness. Both systems: Factual correctness, citation accuracy, refusal behavior, and answer stability across the paired neutral / preference-leading questions. opt-rag only: Faithfulness, Context recall, hit@5, and MRR; hit@5 and MRR are computed from citation IDs, with no LLM judge. Each configuration runs 3 times to measure score variance. The judge LLM comes from a different model family than the generator.
+**Rejected alternatives**: evaluating opt-rag alone (no reference point for whether retrieval adds anything); bare Gemini with code execution as a third arm (only meaningful next to the timeline calculator, which is a stretch goal); a bare Gemini prompt without the citation and refusal instructions (prompt differences would mix into the retrieval comparison); a single run per configuration (a small delta cannot be told apart from run-to-run noise); a judge from the generator's model family (it may favor answers written in its own style)
+**Rationale**: This tests the hypothesis from the product scope entry directly. Answer stability across neutral and leading phrasings shows whether retrieved context makes answers less sensitive to how a question is framed. Retrieval metrics computed from citation IDs are deterministic, so they carry none of the judge's noise.
