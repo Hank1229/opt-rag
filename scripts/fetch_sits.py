@@ -13,6 +13,8 @@ import html
 import re
 import time
 
+import httpx
+
 from corpus import RAW_DIR, make_client, manifest_entry, sha256, update_manifest
 
 BASE = "https://studyinthestates.dhs.gov"
@@ -47,11 +49,13 @@ def article_text(page: str) -> str:
     match = ARTICLE_RE.search(page)
     if match is None:
         raise ValueError("no <article> element")
-    text = TAG_RE.sub(" ", SCRIPT_STYLE_RE.sub(" ", match.group(1)))
+    article = SCRIPT_STYLE_RE.sub(" ", match.group(1))
+    text = TAG_RE.sub(" ", article)
     return " ".join(html.unescape(text).split())
 
 
-def main() -> None:
+def fetch_pages() -> list[tuple[str, httpx.Response, str]]:
+    """Fetch every page in PATHS, returning (path, response, article text) per page."""
     pages = []
     with make_client() as client:
         for i, path in enumerate(PATHS):
@@ -60,11 +64,17 @@ def main() -> None:
             resp = client.get(BASE + path)
             resp.raise_for_status()
             pages.append((path, resp, article_text(resp.text)))
+    return pages
+
+
+def main() -> None:
+    pages = fetch_pages()
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     entries = []
     for path, resp, text in pages:
-        out = OUT_DIR / f"{path.rsplit('/', 1)[-1]}.html"
+        slug = path.rsplit("/", 1)[-1]
+        out = OUT_DIR / f"{slug}.html"
         out.write_bytes(resp.content)
         entries.append(manifest_entry(2, resp, out, content_sha256=sha256(text.encode())))
         print(f"{len(text):>7,} text chars  {out.relative_to(RAW_DIR)}")

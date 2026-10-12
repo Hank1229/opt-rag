@@ -17,6 +17,7 @@ import httpx
 from corpus import MANIFEST, RAW_DIR, make_client, manifest_entry, update_manifest
 
 API = "https://www.ecfr.gov/api/versioner/v1"
+TITLE = 8
 HIERARCHY = {"chapter": "I", "subchapter": "B", "part": "214", "section": "214.2"}
 OUT = RAW_DIR / "ecfr" / "8-cfr-214.2.xml"
 
@@ -29,7 +30,7 @@ def recorded_issue_date() -> str | None:
 
 def latest_issue_date(client: httpx.Client) -> str:
     titles = client.get(f"{API}/titles.json").raise_for_status().json()["titles"]
-    return next(t["latest_issue_date"] for t in titles if t["number"] == 8)
+    return next(t["latest_issue_date"] for t in titles if t["number"] == TITLE)
 
 
 def main() -> None:
@@ -44,7 +45,7 @@ def main() -> None:
     with make_client() as client:
         issue_date = args.issue_date or recorded_issue_date() or latest_issue_date(client)
         # eCFR answers 406 to uncompressed requests; httpx sends Accept-Encoding: gzip by default.
-        resp = client.get(f"{API}/full/{issue_date}/title-8.xml", params=HIERARCHY)
+        resp = client.get(f"{API}/full/{issue_date}/title-{TITLE}.xml", params=HIERARCHY)
         resp.raise_for_status()
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
