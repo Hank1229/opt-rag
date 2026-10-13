@@ -2,13 +2,13 @@
 
 ## What this project is
 
-opt-rag: a RAG QA system over F-1/OPT regulations, built in 14 days as an
-interview portfolio piece. The point is not the app itself but the eval
-story: every design decision must be explainable and every improvement
-must show up as a number.
+opt-rag: a RAG QA system over F-1/OPT regulations, built as an interview
+portfolio piece. The point is not the app itself but the eval story:
+every design decision must be explainable and every improvement must
+show up as a number.
 
 Stack: FastAPI + Supabase pgvector + Gemini (embedding and generation) +
-Ragas + Langfuse + Next.js frontend. Deploy: Fly.io/Railway + Vercel.
+Ragas + Next.js frontend. Deploy: Fly.io/Railway + Vercel.
 
 ## Locked decisions (do not change without asking)
 
@@ -37,9 +37,24 @@ Ragas + Langfuse + Next.js frontend. Deploy: Fly.io/Railway + Vercel.
 
 ## Working rules
 
-- Hank writes no code through you without reviewing the diff. Explain
-  what changed and why in plain terms; he must be able to defend every
-  line in an interview.
+- This session is for implementation only. Concept explanations and
+  design discussion happen in a separate place. Keep chat explanations
+  short unless Hank asks for more; he will bring questions elsewhere.
+- Work in small steps. Before each step, Hank gives a short list of
+  expected results, written as plain sentences ("input -> expected
+  result"). Turn each one into a test first, then implement. Do not
+  change his expected results. You may add extra edge cases, but label
+  them as yours in the test name or a comment.
+- pytest is an allowed dev dependency; tests live in tests/.
+- After each step, report:
+  1. files changed and the diff
+  2. the exact command Hank should run to check it himself, and what
+     output to expect
+  3. test results
+  4. a short list of ways this code could fail (edge cases not
+     covered, assumptions it makes, inputs that would break it)
+- Never overwrite a manual edit Hank made. If his edit conflicts with
+  your change, stop and ask.
 - One variable per experiment. Never bundle a chunking change with a
   prompt change.
 - Do not install packages, create databases, or add schema fields
@@ -48,7 +63,9 @@ Ragas + Langfuse + Next.js frontend. Deploy: Fly.io/Railway + Vercel.
   only when Hank explicitly asks, for questions he wrote, in the
   format: short answer + verbatim source quote + citation.
 - After any decision-level discussion, output a DECISIONS.md entry:
-  Decision / Rejected alternatives / Rationale / Date.
+  Decision / Rejected alternatives / Rationale / Date. Add a "Caught"
+  line only when a test or review actually caught a problem: what it
+  was and how it was fixed.
 - Any report, plan, or summary longer than a screen goes into a Claude
   Doc; give Hank the link instead of pasting it in the terminal. If
   Claude Docs is unavailable, write it to /tmp/<topic>.md and say so.
