@@ -84,3 +84,49 @@ alternatives and rationale. Newest entries at the bottom.
 **Decision**: Run the same frozen gold set through bare Gemini and through opt-rag. Bare Gemini gets the same generation prompt as opt-rag (cite paragraph numbers, refuse when unsure) minus the retrieved context, so retrieval is the only difference between the two arms. Ragas metrics: Faithfulness, Context recall, Factual correctness. Both systems: Factual correctness, citation accuracy, refusal behavior, and answer stability across the paired neutral / preference-leading questions. opt-rag only: Faithfulness, Context recall, hit@5, and MRR; hit@5 and MRR are computed from citation IDs, with no LLM judge. Each configuration runs 3 times to measure score variance. The judge LLM comes from a different model family than the generator.
 **Rejected alternatives**: evaluating opt-rag alone (no reference point for whether retrieval adds anything); bare Gemini with code execution as a third arm (only meaningful next to the timeline calculator, which is a stretch goal); a bare Gemini prompt without the citation and refusal instructions (prompt differences would mix into the retrieval comparison); a single run per configuration (a small delta cannot be told apart from run-to-run noise); a judge from the generator's model family (it may favor answers written in its own style)
 **Rationale**: This tests the hypothesis from the product scope entry directly. Answer stability across neutral and leading phrasings shows whether retrieved context makes answers less sensitive to how a question is framed. Retrieval metrics computed from citation IDs are deterministic, so they carry none of the judge's noise.
+
+## Step 06: Database schema
+
+### Two tables: `documents` + `chunks`
+- **Decision:** Store source-level info (source_tier, title, URL, version_date) in `documents`; store chunk text, citation_key, chunk_index, and embedding in `chunks`, linked by a foreign key with ON DELETE CASCADE.
+- **Rejected alternatives:** One flat `chunks` table repeating source info on every row; one table with source info in a JSONB `metadata` column.
+- **Rationale:** A flat table works at this scale, but re-ingesting a document, recovering from a half-finished ingest, and listing corpus versions all get error-prone when source info is copied onto hundreds of rows. JSONB lets typos like `eCFR` or a misspelled key through unchecked. The cost of two tables is one join at retrieval time.
+- **Date:** 2026-10-14
+
+### One `version_date` per document, required
+- **Decision:** `documents.version_date` is NOT NULL with no default. eCFR rows store the official issue date (2026-10-01); Study in the States rows store the fetch date, since those pages have no official publish date.
+- **Rejected alternatives:** No version field; full version history with validity ranges; defaulting to the insert date.
+- **Rationale:** Answers need to state which version they cite. A default of "today" would silently record the wrong date for eCFR. Full history adds version filtering that no question in scope needs.
+- **Date:** 2026-10-14
+
+### `source_tier` restricted to `ecfr` / `sits`
+- **Decision:** A CHECK constraint rejects any other value.
+- **Rejected alternatives:** Free text; auto-lowercasing input before insert.
+- **Rationale:** Fail loud. A wrong tier value means an upstream bug in fetch or ingest; silently normalizing it hides the bug and only fixes casing errors.
+- **Date:** 2026-10-14
+
+### No vector index (exact scan)
+- **Decision:** Retrieval compares the query against every chunk with cosine distance; no HNSW or IVFFlat index.
+- **Rejected alternatives:** HNSW; IVFFlat.
+- **Rationale:** The corpus is a few hundred to low thousands of chunks, so exact scan takes milliseconds while Gemini generation takes seconds. Exact results keep hit@5 free of approximation error, which matters for legal content. IVFFlat also needs existing data to build well.
+- **Revisit when:** chunk count exceeds ~10k or retrieval noticeably slows responses; then add HNSW and compare hit@5 against exact scan.
+- **Date:** 2026-10-14
+
+### Uniqueness on (document_id, citation_key, chunk_index)
+- **Decision:** A unique constraint on the three columns together.
+- **Rejected alternatives:** No constraint; truncate and reload every ingest; unique content_hash.
+- **Rationale:** A database-level guard against duplicates regardless of ingest bugs, so ingest can be rerun safely. citation_key alone is not unique because oversized paragraphs split into several chunks sharing one key. Truncate-and-reload re-embeds everything every run and leaves a half-empty table on failure. content_hash leaves stale rows behind when text changes. Removing stale chunks on re-ingest is handled in step 07.
+- **Date:** 2026-10-14
+
+### Schema managed as migration SQL files
+- **Decision:** All schema changes live as migration files in the repo; existing migrations are never edited, changes go in new files.
+- **Rejected alternatives:** Running SQL by hand in the Supabase dashboard; an ORM (SQLAlchemy + Alembic).
+- **Rationale:** Anyone can rebuild the same database from the repo, and git history shows every schema change. An ORM needs extra packages for pgvector and is more machinery than this project needs.
+- **Date:** 2026-10-14
+
+### RLS on, backend-only access
+- **Decision:** Row Level Security enabled on both tables with no public policies. The project has the Data API on, "Automatically expose new tables" off, and "Enable automatic RLS" off. The migration enables RLS itself and grants table privileges only to the role the secret key uses. Only the FastAPI backend reads and writes, using the Supabase secret key, which never ships to the Vercel frontend.
+- **Rejected alternatives:** RLS off; RLS on with a public read policy; auto-exposing new tables and relying on RLS alone; Supabase's automatic RLS trigger.
+- **Rationale:** The publishable key is public by design. With tables not auto-exposed, the publishable key gets a permission error instead of silently returning zero rows, which makes misuse obvious. Automatic RLS is off so the migration alone is responsible for RLS: a test can then catch a migration that forgets it, and the repo rebuilds correctly on a project without that setting.
+- **Caught:** The plan first used the legacy `anon` / `service_role` key names. New Supabase projects only issue publishable and secret keys, so tests and env vars use the new names.
+- **Date:** 2026-10-14
