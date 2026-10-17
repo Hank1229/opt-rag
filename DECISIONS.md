@@ -153,3 +153,17 @@ alternatives and rationale. Newest entries at the bottom.
 - **Decision:** No `created_at` column and no unique constraint on `documents.url` in step 06.
 - **Rationale:** Nothing needs `created_at` yet; a later migration can add it. How re-ingest identifies "the same document" (url, eCFR section, or another key) is an ingest question and gets decided in step 07.
 - **Date:** 2026-10-16
+
+### Tests run against local Supabase; cloud check is opt-in
+- **Decision:** pytest runs against a local Supabase started with the CLI and rebuilt with `supabase db reset` before each run. Local default URLs and keys live in `.env.test`. Passing `--target` runs test 8 against OPT-RAG with the real keys.
+- **Rejected alternatives:** Running tests directly on OPT-RAG; a second Supabase project for tests; mocking the database.
+- **Rationale:** Every run starts from an empty database built only from the migrations, without touching real data. A second cloud project is limited by the free plan and still needs manual cleanup. Mocks don't enforce dimension limits, constraints, or RLS, so tests would pass without proving anything.
+- **Constraint:** Test 8 writes a temporary row to OPT-RAG and deletes it in a `finally` block. Run it against OPT-RAG only before ingest, or check the dashboard afterward, so a failed cleanup can't leave a fake chunk in retrieval results.
+- **Date:** 2026-10-17
+
+### Migration revokes from public roles and grants to service_role explicitly
+- **Decision:** The migration revokes all table privileges from `anon` and `authenticated` and grants them to `service_role`.
+- **Rejected alternatives:** Relying on OPT-RAG's "Automatically expose new tables: off" setting; a follow-up migration narrowing `service_role` to SELECT/INSERT/UPDATE/DELETE only.
+- **Rationale:** Local Supabase exposes new tables to `anon` by default and OPT-RAG does not, so the same migration has to produce the same permissions in both. The `service_role` grant is a no-op under both current defaults but keeps the migration independent of them. Narrowing `service_role` adds little because the secret key is already admin-level and backend-only.
+- **Caught:** Removing the revoke line on purpose made test 8 return zero rows on local Supabase instead of a permission error, confirming the two environments differ and that the test detects it.
+- **Date:** 2026-10-17
