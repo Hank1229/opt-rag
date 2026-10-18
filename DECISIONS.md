@@ -85,6 +85,12 @@ alternatives and rationale. Newest entries at the bottom.
 **Rejected alternatives**: evaluating opt-rag alone (no reference point for whether retrieval adds anything); bare Gemini with code execution as a third arm (only meaningful next to the timeline calculator, which is a stretch goal); a bare Gemini prompt without the citation and refusal instructions (prompt differences would mix into the retrieval comparison); a single run per configuration (a small delta cannot be told apart from run-to-run noise); a judge from the generator's model family (it may favor answers written in its own style)
 **Rationale**: This tests the hypothesis from the product scope entry directly. Answer stability across neutral and leading phrasings shows whether retrieved context makes answers less sensitive to how a question is framed. Retrieval metrics computed from citation IDs are deterministic, so they carry none of the judge's noise.
 
+## 2026-10-13 v2 backlog
+
+**Decision**: These are planned for v2 and start only after v1 (steps 06 to 13) ships: Langfuse tracing, hybrid search, reranking, chunking experiments, refusal experiments, and Jev refusal-gating. They stay out of CLAUDE.md's stack and out of v1 code, but they are not cancelled.
+**Rejected alternatives**: building any of them during v1 (expands scope before the core pipeline and baseline eval exist); dropping them (they are the experiments that turn the baseline into measured improvements).
+**Rationale**: v1 needs a working pipeline and a frozen baseline first. Each v2 item is one variable to change and re-measure against that baseline.
+
 ## Step 06: Database schema
 
 ### Two tables: `documents` + `chunks`

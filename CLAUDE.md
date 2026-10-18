@@ -66,6 +66,9 @@ Ragas + Next.js frontend. Deploy: Fly.io/Railway + Vercel.
   Decision / Rejected alternatives / Rationale / Date. Add a "Caught"
   line only when a test or review actually caught a problem: what it
   was and how it was fixed.
+- The v2 backlog lives in DECISIONS.md. Something missing from
+  CLAUDE.md or the code is not cancelled; check DECISIONS.md before
+  treating it as removed.
 - Any report, plan, or summary longer than a screen goes into a Claude
   Doc; give Hank the link instead of pasting it in the terminal. If
   Claude Docs is unavailable, write it to /tmp/<topic>.md and say so.
