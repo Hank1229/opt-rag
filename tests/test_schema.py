@@ -5,23 +5,17 @@ edge cases added by Claude. Vectors are synthetic; no Gemini calls.
 """
 
 import httpx
-import psycopg
 import pytest
 from psycopg import errors
 
-from conftest import EMBEDDING_DIMS, vector_literal
-
-
-def unit_vector(position: int, dims: int = EMBEDDING_DIMS) -> list[float]:
-    values = [0.0] * dims
-    values[position] = 1.0
-    return values
-
-
-def chunk_count(db, document_id) -> int:
-    return db.execute(
-        "select count(*) from chunks where document_id = %s", (document_id,)
-    ).fetchone()[0]
+from helpers import (
+    EMBEDDING_DIMS,
+    chunk_count,
+    insert_chunk,
+    insert_document,
+    unit_vector,
+    vector_literal,
+)
 
 
 # 1. Migration on an empty database: tables exist, pgvector enabled, RLS on both.
@@ -41,42 +35,42 @@ def test_01_migration_creates_tables_extension_and_rls(db):
 
 
 # 2. 768 dims accepted; 767 and 3072 rejected.
-def test_02_embedding_must_have_768_dims(db, insert_document, insert_chunk):
-    document_id = insert_document()
-    insert_chunk(document_id, [0.1] * 768, chunk_index=0)
+def test_02_embedding_must_have_768_dims(db):
+    document_id = insert_document(db)
+    insert_chunk(db, document_id, [0.1] * 768, chunk_index=0)
     assert chunk_count(db, document_id) == 1
 
     for bad_dims in (767, 3072):
         with pytest.raises(errors.DataException, match="dimensions"):
             with db.transaction():
-                insert_chunk(document_id, [0.1] * bad_dims, chunk_index=1)
+                insert_chunk(db, document_id, [0.1] * bad_dims, chunk_index=1)
     assert chunk_count(db, document_id) == 1
 
 
 # 3a. Duplicate (document_id, citation_key, chunk_index) rejected, count unchanged.
-def test_03a_duplicate_chunk_key_rejected(db, insert_document, insert_chunk):
-    document_id = insert_document()
-    insert_chunk(document_id, unit_vector(0), citation_key="214.2(f)(10)", chunk_index=0)
+def test_03a_duplicate_chunk_key_rejected(db):
+    document_id = insert_document(db)
+    insert_chunk(db, document_id, unit_vector(0), citation_key="214.2(f)(10)", chunk_index=0)
 
     with pytest.raises(errors.UniqueViolation):
         with db.transaction():
-            insert_chunk(document_id, unit_vector(1), citation_key="214.2(f)(10)", chunk_index=0)
+            insert_chunk(db, document_id, unit_vector(1), citation_key="214.2(f)(10)", chunk_index=0)
     assert chunk_count(db, document_id) == 1
 
 
 # 3b. Same citation_key with different chunk_index (split paragraph) both insert.
-def test_03b_same_citation_key_different_index_allowed(db, insert_document, insert_chunk):
-    document_id = insert_document()
-    insert_chunk(document_id, unit_vector(0), citation_key="214.2(f)(10)", chunk_index=0)
-    insert_chunk(document_id, unit_vector(1), citation_key="214.2(f)(10)", chunk_index=1)
+def test_03b_same_citation_key_different_index_allowed(db):
+    document_id = insert_document(db)
+    insert_chunk(db, document_id, unit_vector(0), citation_key="214.2(f)(10)", chunk_index=0)
+    insert_chunk(db, document_id, unit_vector(1), citation_key="214.2(f)(10)", chunk_index=1)
     assert chunk_count(db, document_id) == 2
 
 
 # 4. Deleting a document deletes its chunks.
-def test_04_delete_document_cascades_to_chunks(db, insert_document, insert_chunk):
-    document_id = insert_document()
-    insert_chunk(document_id, unit_vector(0), chunk_index=0)
-    insert_chunk(document_id, unit_vector(1), chunk_index=1)
+def test_04_delete_document_cascades_to_chunks(db):
+    document_id = insert_document(db)
+    insert_chunk(db, document_id, unit_vector(0), chunk_index=0)
+    insert_chunk(db, document_id, unit_vector(1), chunk_index=1)
 
     db.execute("delete from documents where id = %s", (document_id,))
     assert chunk_count(db, document_id) == 0
@@ -84,14 +78,14 @@ def test_04_delete_document_cascades_to_chunks(db, insert_document, insert_chunk
 
 # 5. v and 2v are both at the top of a cosine-distance query for v, distance ~0.
 # The orthogonal and opposite vectors are Claude's additions so "top" means something.
-def test_05_cosine_distance_ignores_vector_length(db, insert_document, insert_chunk):
-    document_id = insert_document()
+def test_05_cosine_distance_ignores_vector_length(db):
+    document_id = insert_document(db)
     v = [0.0] * EMBEDDING_DIMS
     v[0], v[1] = 0.6, 0.8
-    v_id = insert_chunk(document_id, v, citation_key="v", chunk_index=0)
-    v2_id = insert_chunk(document_id, [2 * x for x in v], citation_key="2v", chunk_index=0)
-    insert_chunk(document_id, unit_vector(2), citation_key="orthogonal", chunk_index=0)
-    insert_chunk(document_id, [-x for x in v], citation_key="opposite", chunk_index=0)
+    v_id = insert_chunk(db, document_id, v, citation_key="v", chunk_index=0)
+    v2_id = insert_chunk(db, document_id, [2 * x for x in v], citation_key="2v", chunk_index=0)
+    insert_chunk(db, document_id, unit_vector(2), citation_key="orthogonal", chunk_index=0)
+    insert_chunk(db, document_id, [-x for x in v], citation_key="opposite", chunk_index=0)
 
     rows = db.execute(
         """
@@ -121,24 +115,24 @@ def test_06_document_requires_version_date(db):
 
 
 # 7. source_tier is case-sensitive: 'eCFR' rejected, 'ecfr' and 'sits' accepted.
-def test_07_source_tier_check(db, insert_document):
+def test_07_source_tier_check(db):
     with pytest.raises(errors.CheckViolation):
         with db.transaction():
-            insert_document(source_tier="eCFR")
+            insert_document(db, source_tier="eCFR")
 
-    insert_document(source_tier="ecfr", url="https://example.test/ecfr")
-    insert_document(source_tier="sits", url="https://example.test/sits")
+    insert_document(db, source_tier="ecfr", url="https://example.test/ecfr")
+    insert_document(db, source_tier="sits", url="https://example.test/sits")
 
 
 # Extra (Claude): a chunk pointing to a missing document is rejected.
-def test_extra_chunk_requires_existing_document(db, insert_chunk):
+def test_extra_chunk_requires_existing_document(db):
     with pytest.raises(errors.ForeignKeyViolation):
-        insert_chunk(-1, unit_vector(0))
+        insert_chunk(db, -1, unit_vector(0))
 
 
 # Extra (Claude): NULL embedding is rejected.
-def test_extra_embedding_not_null(db, insert_document):
-    document_id = insert_document()
+def test_extra_embedding_not_null(db):
+    document_id = insert_document(db)
     with pytest.raises(errors.NotNullViolation):
         db.execute(
             """
@@ -174,11 +168,11 @@ def test_08_data_api_access_by_key(env):
     rest = f"{env['SUPABASE_URL']}/rest/v1"
     secret = {"apikey": env["SUPABASE_SECRET_KEY"]}
     publishable = {"apikey": env["SUPABASE_PUBLISHABLE_KEY"]}
-    returning = {**secret, "Prefer": "return=representation"}
+    secret_with_return = {**secret, "Prefer": "return=representation"}
 
     response = httpx.post(
         f"{rest}/documents",
-        headers=returning,
+        headers=secret_with_return,
         json={
             "source_tier": "ecfr",
             "title": "pytest step 06 access check (safe to delete)",
@@ -191,7 +185,7 @@ def test_08_data_api_access_by_key(env):
     try:
         response = httpx.post(
             f"{rest}/chunks",
-            headers=returning,
+            headers=secret_with_return,
             json={
                 "document_id": document_id,
                 "citation_key": "214.2(f)(1)",

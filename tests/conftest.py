@@ -15,7 +15,6 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 ENV_FILES = {"local": ROOT / ".env.test", "opt-rag": ROOT / ".env"}
-EMBEDDING_DIMS = 768
 
 
 def pytest_addoption(parser):
@@ -30,11 +29,6 @@ def read_env_file(path: Path) -> dict[str, str]:
             key, value = line.split("=", 1)
             values[key.strip()] = value.strip()
     return values
-
-
-def vector_literal(values) -> str:
-    """Format floats as pgvector text input, e.g. '[0.1,0.2]'."""
-    return "[" + ",".join(repr(float(v)) for v in values) + "]"
 
 
 @pytest.fixture(scope="session")
@@ -87,32 +81,3 @@ def db(target, env):
         yield conn
         conn.rollback()
 
-
-@pytest.fixture
-def insert_document(db):
-    def insert(source_tier="ecfr", version_date="2026-10-01", url="https://example.test/doc"):
-        return db.execute(
-            """
-            insert into documents (source_tier, title, url, version_date)
-            values (%s, 'Test document', %s, %s)
-            returning id
-            """,
-            (source_tier, url, version_date),
-        ).fetchone()[0]
-
-    return insert
-
-
-@pytest.fixture
-def insert_chunk(db):
-    def insert(document_id, embedding, citation_key="214.2(f)(1)", chunk_index=0):
-        return db.execute(
-            """
-            insert into chunks (document_id, citation_key, chunk_index, content, embedding)
-            values (%s, %s, %s, 'Test chunk text', %s::vector)
-            returning id
-            """,
-            (document_id, citation_key, chunk_index, vector_literal(embedding)),
-        ).fetchone()[0]
-
-    return insert
