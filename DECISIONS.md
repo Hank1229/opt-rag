@@ -155,10 +155,11 @@ alternatives and rationale. Newest entries at the bottom.
 - **Date:** 2026-10-16
 
 ### Tests run against local Supabase; cloud check is opt-in
-- **Decision:** pytest runs against a local Supabase started with the CLI and rebuilt with `supabase db reset` before each run. Local default URLs and keys live in `.env.test`. Passing `--target` runs test 8 against OPT-RAG with the real keys.
-- **Rejected alternatives:** Running tests directly on OPT-RAG; a second Supabase project for tests; mocking the database.
-- **Rationale:** Every run starts from an empty database built only from the migrations, without touching real data. A second cloud project is limited by the free plan and still needs manual cleanup. Mocks don't enforce dimension limits, constraints, or RLS, so tests would pass without proving anything.
-- **Constraint:** Test 8 writes a temporary row to OPT-RAG and deletes it in a `finally` block. Run it against OPT-RAG only before ingest, or check the dashboard afterward, so a failed cleanup can't leave a fake chunk in retrieval results.
+- **Decision:** pytest runs against a local Supabase started with the CLI and rebuilt with `supabase db reset` before each run. Local URLs and keys are read from `supabase status -o env` at test time, so no keys are stored in the repo. Passing `--target opt-rag` runs test 8 against OPT-RAG with the keys in `.env`.
+- **Rejected alternatives:** Running tests directly on OPT-RAG; a second Supabase project for tests; mocking the database; committing local keys in `.env.test`; a gitignored `.env.test` with an example file.
+- **Rationale:** Every run starts from an empty database built only from the migrations, without touching real data. Reading from `supabase status` keeps keys out of git and always matches the running local stack; the CLI is already required for `db reset`. Mocks don't enforce dimension limits, constraints, or RLS.
+- **Constraint:** Test 8 writes a temporary row to OPT-RAG and deletes it in a `finally` block. Run it against OPT-RAG only before ingest, or check the dashboard afterward. Claude Code never runs `--target opt-rag` unless asked (see CLAUDE.md).
+- **Caught:** The first version committed local default keys in `.env.test`. GitHub push protection blocked the push because the local secret key has the same `sb_secret_` format as a real one. The unpushed history was rewritten to drop the file before anything reached GitHub.
 - **Date:** 2026-10-17
 
 ### Migration revokes from public roles and grants to service_role explicitly
