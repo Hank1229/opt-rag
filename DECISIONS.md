@@ -168,6 +168,12 @@ alternatives and rationale. Newest entries at the bottom.
 - **Caught:** The first version committed local default keys in `.env.test`. GitHub push protection blocked the push because the local secret key has the same `sb_secret_` format as a real one. The unpushed history was rewritten to drop the file before anything reached GitHub.
 - **Date:** 2026-10-17
 
+### Local Supabase runs only the services tests need
+- **Decision:** supabase/config.toml disables realtime, studio, inbucket, storage, edge_runtime, and analytics (vector and pg_meta stop with them). Local stack runs db, the API gateway, PostgREST, and auth.
+- **Rejected alternatives:** Running the full default stack; lowering the Docker memory limit alone.
+- **Rationale:** The full stack froze a 16 GB Mac. Trimming dropped container memory from about 2.2 GiB to about 260 MiB and cut a test run from about 40 s to about 12 s, with all 12 tests still passing. Re-enable a service if a later step needs it.
+- **Date:** 2026-10-19
+
 ### Migration revokes from public roles and grants to service_role explicitly
 - **Decision:** The migration revokes all table privileges from `anon` and `authenticated` and grants them to `service_role`.
 - **Rejected alternatives:** Relying on OPT-RAG's "Automatically expose new tables: off" setting; a follow-up migration narrowing `service_role` to SELECT/INSERT/UPDATE/DELETE only.
