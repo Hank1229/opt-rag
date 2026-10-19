@@ -180,3 +180,49 @@ alternatives and rationale. Newest entries at the bottom.
 - **Rationale:** Local Supabase exposes new tables to `anon` by default and OPT-RAG does not, so the same migration has to produce the same permissions in both. The `service_role` grant is a no-op under both current defaults but keeps the migration independent of them. Narrowing `service_role` adds little because the secret key is already admin-level and backend-only.
 - **Caught:** Removing the revoke line on purpose made test 8 return zero rows on local Supabase instead of a permission error, confirming the two environments differ and that the test detects it.
 - **Date:** 2026-10-17
+
+## Step 07: Ingest
+
+### Ingest shape
+- **Decision:** Ingest is a local CLI script that reads only the committed raw corpus and manifest, with custom chunking code.
+- **Rejected alternatives:** One script that fetches and writes in the same run; LangChain / LlamaIndex loaders and vector stores; a `POST /ingest` FastAPI endpoint.
+- **Rationale:** Eval needs the same input to always produce the same chunks, so ingest must not depend on the network. Framework splitters don't understand eCFR paragraph IDs, and every chunk's origin has to be explainable. The corpus changes a few times a year, so there is no reason to expose a write path on a public API or keep database credentials anywhere but the local machine.
+- **Date:** 2026-10-19
+
+### Document identity on re-ingest
+- **Decision:** Each source gets a stable id (e.g. `ecfr-214.2f`) stored in the manifest and in a unique column on `documents`. The fetch scripts write the id, so a refetch keeps it. A new version of the same source updates `version_date` on the existing row.
+- **Rejected alternatives:** Unique on `url`; content hash as identity; ids added to the manifest by hand.
+- **Rationale:** eCFR URLs carry the issue date, so a new version would look like a new document and the old regulation text would stay retrievable. A content hash answers "did it change", not "is it the same document". Hand-added ids would be wiped the next time a fetch script rewrites the manifest. Re-embedding all ~14 documents is cheap, so skip-if-unchanged isn't needed yet.
+- **Resolves:** Step 06 "Deferred to step 07".
+- **Date:** 2026-10-19
+
+### Replacing a document's chunks
+- **Decision:** Per document, compute all embeddings first, then in one Postgres transaction upsert the `documents` row (title, url, version_date) and replace that document's chunks (delete, then insert). Writes use a direct Postgres connection (psycopg). If one document fails, its row and chunks stay unchanged, the others still update, and the run exits non-zero.
+- **Rejected alternatives:** Upsert only; truncate and rebuild everything; version history with soft delete (v2); updating the `documents` row in a separate step; stopping the whole run on the first failure.
+- **Rationale:** The (document_id, citation_key, chunk_index) constraint prevents duplicates but not orphans: upsert leaves removed paragraphs in the table and retrievable. The transaction means readers see all-old or all-new, never zero chunks, and `version_date` always matches the chunks under it. Embedding outside the transaction keeps the slow, failure-prone Gemini call from holding it open. supabase-py sends delete and insert as separate HTTP requests, which can't share a transaction. Truncate-rebuild leaves the cloud index empty if a run dies halfway. Since each document is all-or-nothing, one failure can't corrupt the others.
+- **Date:** 2026-10-19
+
+### Embedding model and task types
+- **Decision:** `gemini-embedding-001` at 768 dims, task type `RETRIEVAL_DOCUMENT` for chunks and `RETRIEVAL_QUERY` for questions, L2-normalized before storing. Model name locked in CLAUDE.md.
+- **Rejected alternatives:** No task type; `QUESTION_ANSWERING` for queries (kept as a lever for failure analysis); `gemini-embedding-2-preview`.
+- **Rationale:** Questions and regulation text look nothing alike; task types train the model to place a question near its answer instead of near similar-looking text. Google requires manual normalization below 3072 dims; cosine doesn't need it, but it costs nothing and avoids a bug if we switch to inner product. Vectors from different models aren't comparable, so the model is locked; GA is more stable than preview. 
+- **Date:** 2026-10-19
+
+### Contextual header for embedding
+- **Decision:** The text sent to Gemini is one header line (document title + paragraph or heading path) plus the chunk text. The `content` column stores the original text only.
+- **Rejected alternatives:** Embed raw chunk text; LLM-generated contextual summaries per chunk.
+- **Rationale:** Many eCFR chunks lose context on their own (a paragraph about 90 days of unemployment never says "OPT"). The header restores it deterministically at zero cost. LLM summaries add a call per chunk and make ingest non-deterministic.
+- **Date:** 2026-10-19
+
+### Chunk quality gate before embedding
+- **Decision:** A dry-run mode chunks everything and writes a report without calling Gemini or touching the database. Empty chunks, duplicate (citation_key, chunk_index), and chunks over the ~800-token fallback size fail the check. The same check runs at the start of every real ingest and stops it before any Gemini call.
+- **Rejected alternatives:** Inspecting chunks only after they are in the database.
+- **Rationale:** Chunk quality caps hit@5, and bad chunks are cheaper to catch before paying for embeddings and writing to the index. A chunk over the fallback size means the fallback split itself failed. Token counts come from one local function shared by the chunker and the gate, so dry-run stays offline and both agree on the limit.
+- **Date:** 2026-10-19
+
+### Cloud mode for test 8 retired
+- **Decision:** `--target opt-rag` no longer runs test 8; passing it exits with a message pointing to this entry. All tests run against local Supabase only.
+- **Rejected alternatives:** Keeping the opt-in flag and relying on CLAUDE.md; letting test 8 check whether OPT-RAG already has documents before running.
+- **Rationale:** Test 8 writes a temporary row to OPT-RAG. Once ingest puts real data there, a failed cleanup would leave a fake document next to real ones, and a written rule is easy to forget. The cloud check already passed in step 06. A row-count check would still connect to the production database just to decide not to run.
+- **Amends:** Step 06 "Tests run against local Supabase; cloud check is opt-in".
+- **Date:** 2026-10-19
