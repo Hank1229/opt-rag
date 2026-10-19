@@ -226,3 +226,70 @@ alternatives and rationale. Newest entries at the bottom.
 - **Rationale:** Test 8 writes a temporary row to OPT-RAG. Once ingest puts real data there, a failed cleanup would leave a fake document next to real ones, and a written rule is easy to forget. The cloud check already passed in step 06. A row-count check would still connect to the production database just to decide not to run.
 - **Amends:** Step 06 "Tests run against local Supabase; cloud check is opt-in".
 - **Date:** 2026-10-19
+
+### Study in the States citation keys
+- **Decision:** Tier 2 `citation_key` is `<page-slug>` for text before the first heading, otherwise `<page-slug>#<heading path>`. The path joins h2 through h5 headings and accordion questions with `/`, each lowercased with runs of other characters turned into `-`. Each `<dt>`/`<dd>` pair in an accordion is its own section, with the question as its last path part. Fallback parts share the key and differ by `chunk_index`.
+- **Rejected alternatives:** Positional keys (`#section-3`); numeric ids per heading; one chunk per accordion block; splitting on h2/h3 only.
+- **Rationale:** You can check readable keys against the page by eye when verifying gold-set citations. Positional keys shift when someone adds a section above. FAQ questions are the closest text to real user questions, so each one gets its own embedding. With h2/h3 only, the 2,180-token "Practical Training for F Students" section on applying-for-practical-training mixed CPT, OPT, and STEM OPT across four size-based parts.
+- **Known cost:** A reworded heading changes its key, so gold-set citations must be rechecked after any Tier 2 refetch.
+- **Date:** 2026-10-19
+
+### Navigation-only text is not a chunk
+- **Decision:** Text before the first heading that consists only of in-page anchor links is dropped.
+- **Rejected alternatives:** Keeping it as an intro chunk.
+- **Rationale:** The STEM OPT FAQ intro ("Click on the ... topic of your choice") carries no content. If retrieved, it takes one of the five context slots.
+- **Date:** 2026-10-19
+
+### eCFR paragraph levels from marker style
+- **Decision:** Ingest reads the level from the marker: `(10)` is level 2, `(ii)` 3, `(C)` 4, italic `(7)` 5, italic `(i)` 6. A paragraph that opens several levels inline gets the deepest key. Heading-only and `[Reserved]` paragraphs are not chunks. A skipped level or an unnumbered paragraph inside (f) raises an error.
+- **Rejected alternatives:** Guessing the level from position; chunking every paragraph, including empty ones.
+- **Rationale:** Only the italic markup separates levels 5 and 6 from levels 2 and 3 in the XML. A loud failure on a structure change is better than writing wrong citation keys.
+- **Date:** 2026-10-19
+
+### Small eCFR list items stay separate for the baseline
+- **Decision:** Each eCFR list item stays its own chunk, even very short ones such as "(3) Is nonfrivolous."
+- **Rejected alternatives:** Merging list items into their parent paragraph now.
+- **Rationale:** This follows the 2026-09-01 one-paragraph-per-chunk rule, and the header line restores each item's path at embed time. Merging is a chunking experiment from the v2 backlog. Its value shows up only as a hit@5/MRR change against this baseline.
+- **Date:** 2026-10-19
+
+### Local token estimate shared by chunker and gate
+- **Decision:** `count_tokens` counts `\w+|[^\w\s]` matches (words plus punctuation marks). The same function decides fallback splits, sizes the parts, and runs the gate's 800 limit.
+- **Rejected alternatives:** Gemini `countTokens` API; tiktoken.
+- **Rationale:** Dry-run must stay offline and deterministic, and the chunker and gate must agree exactly. `countTokens` is a network call, and tiktoken is another model's tokenizer plus a new dependency. The ~800 limit is approximate by design.
+- **Date:** 2026-10-19
+
+### Stored content keeps the section's own heading line
+- **Decision:** `chunks.content` is the unit's original source text, including its own heading line (eCFR marker and heading; Study in the States heading or FAQ question). Only the embedding sees the synthetic header (document title + path).
+- **Rejected alternatives:** Body text only; storing the full header in `content`.
+- **Rationale:** The generator sees `content`, and an FAQ answer such as "Yes. You and your employer..." is ambiguous without its question. Storing the synthetic header would break "content stores the original text only".
+- **Date:** 2026-10-19
+
+### Gemini over REST with httpx
+- **Decision:** `app/embedding.py` calls `batchEmbedContents` with httpx: batches of 100, key in the `x-goog-api-key` header, retries on 429/5xx with exponential backoff and the 429 `retryDelay` hint, up to 6 attempts.
+- **Rejected alternatives:** google-genai SDK.
+- **Rationale:** httpx is already a dependency and the call uses one endpoint. Owning the retry loop makes it testable with a mocked transport. Sending the key in a header keeps it out of URLs and error messages.
+- **Date:** 2026-10-19
+
+### Local ingest reads the database URL from supabase status
+- **Decision:** `scripts/ingest.py --target local` (the default) reads `DB_URL` from `supabase status -o env`; `--target opt-rag` reads `DATABASE_URL` from `.env`.
+- **Rejected alternatives:** One `DATABASE_URL` in `.env` for both, switched by hand.
+- **Rationale:** The tests already work this way. With no local URL in `.env`, a forgotten edit cannot point a "local" run at OPT-RAG.
+- **Date:** 2026-10-19
+
+### Human-readable eCFR URL in `documents.url`
+- **Decision:** For eCFR, `documents.url` stores the point-in-time page for `ecfr_issue_date` (e.g. `https://www.ecfr.gov/on/2026-10-01/title-8/section-214.2`). The manifest keeps the versioner API URL as the fetch record. Display code builds paragraph anchors from `citation_key`; the database does not store them.
+- **Rejected alternatives:** Storing the versioner API XML URL; a `/current/` link.
+- **Rationale:** The frontend shows `url` as the source link, and I open it to check gold-set citations, so a person must be able to read it. A `/current/` link can drift away from the indexed version.
+- **Date:** 2026-10-19
+
+### Ingest verifies raw file hashes
+- **Decision:** Before chunking, ingest compares each raw file's SHA-256 with `raw_sha256` in the manifest. Any mismatch fails the gate for the whole run, dry-run included, before any Gemini call.
+- **Rejected alternatives:** No check; warning and continuing.
+- **Rationale:** The 2026-10-07 corpus snapshot ties the eval baseline to the manifest hashes. Without the check, a hand-edited raw file would reach the index silently.
+- **Date:** 2026-10-19
+
+### Sources removed from the manifest are not deleted
+- **Decision:** Ingest only inserts and replaces documents listed in the manifest. A source dropped from the manifest keeps its rows.
+- **Rejected alternatives:** Deleting documents that are absent from the manifest.
+- **Rationale:** The v1 corpus is fixed at 14 sources, so deletion would add a destructive code path with no current use. Revisit if the source list changes.
+- **Date:** 2026-10-19
