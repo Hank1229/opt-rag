@@ -1,11 +1,12 @@
-"""Shared fixtures for schema tests: target selection, fresh local database, connections.
+"""Shared fixtures for tests: fresh local database, connections, corpus copies.
 
-`--target local` (default) reads URL and keys from `supabase status -o env`, resets
-the local Supabase stack so every migration is applied to an empty database, and
-allows direct Postgres access.
-`--target opt-rag` reads .env and only runs tests that go through the Data API.
+Tests run against local Supabase only. URL and keys come from
+`supabase status -o env`, and the stack is reset so every migration is applied
+to an empty database. `--target opt-rag` was retired in step 07 and exits
+without running anything (DECISIONS.md, "Cloud mode for test 8 retired").
 """
 
+import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -15,6 +16,7 @@ import psycopg
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
+RAW_DIR = ROOT / "data" / "raw"
 TARGETS = ("local", "opt-rag")
 # `supabase status -o env` name -> the .env name the tests use.
 STATUS_KEYS = {
@@ -27,6 +29,15 @@ STATUS_KEYS = {
 
 def pytest_addoption(parser):
     parser.addoption("--target", choices=TARGETS, default="local")
+
+
+def pytest_configure(config):
+    if config.getoption("--target") == "opt-rag":
+        pytest.exit(
+            "--target opt-rag is retired: tests run against local Supabase only. "
+            'See DECISIONS.md, Step 07, "Cloud mode for test 8 retired".',
+            returncode=2,
+        )
 
 
 def parse_env(text: str) -> dict[str, str]:
@@ -51,15 +62,8 @@ def read_local_status() -> dict[str, str]:
 
 
 @pytest.fixture(scope="session")
-def target(request) -> str:
-    return request.config.getoption("--target")
-
-
-@pytest.fixture(scope="session")
-def env(target) -> dict[str, str]:
-    if target == "local":
-        return read_local_status()
-    return parse_env((ROOT / ".env").read_text())
+def env() -> dict[str, str]:
+    return read_local_status()
 
 
 def wait_for_data_api(env: dict[str, str], timeout: float = 30.0) -> None:
@@ -81,10 +85,8 @@ def wait_for_data_api(env: dict[str, str], timeout: float = 30.0) -> None:
 
 
 @pytest.fixture(scope="session", autouse=True)
-def fresh_database(target, env):
-    """Local only: drop everything and re-apply supabase/migrations to an empty database."""
-    if target != "local":
-        return
+def fresh_database(env):
+    """Drop everything and re-apply supabase/migrations to an empty database."""
     result = subprocess.run(
         ["supabase", "db", "reset"], cwd=ROOT, capture_output=True, text=True
     )
@@ -94,11 +96,28 @@ def fresh_database(target, env):
 
 
 @pytest.fixture
-def db(target, env):
+def db(env):
     """Direct Postgres connection; everything a test writes is rolled back."""
-    if target != "local":
-        pytest.skip("direct database access only runs against the local stack")
     with psycopg.connect(env["DATABASE_URL"]) as conn:
         yield conn
         conn.rollback()
+
+
+def empty_tables(conn) -> None:
+    conn.execute("truncate documents, chunks restart identity cascade")
+
+
+@pytest.fixture
+def ingest_db(env):
+    """Autocommit connection for ingest tests, which commit: tables emptied before and after."""
+    with psycopg.connect(env["DATABASE_URL"], autocommit=True) as conn:
+        empty_tables(conn)
+        yield conn
+        empty_tables(conn)
+
+
+@pytest.fixture
+def raw_copy(tmp_path) -> Path:
+    """Copy of data/raw/ that a test may edit; the committed corpus is never touched."""
+    return shutil.copytree(RAW_DIR, tmp_path / "raw")
 

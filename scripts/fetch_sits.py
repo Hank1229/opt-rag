@@ -76,7 +76,9 @@ def main() -> None:
         slug = path.rsplit("/", 1)[-1]
         out = OUT_DIR / f"{slug}.html"
         out.write_bytes(resp.content)
-        entries.append(manifest_entry(2, resp, out, content_sha256=sha256(text.encode())))
+        entries.append(
+            manifest_entry(f"sits-{slug}", 2, resp, out, content_sha256=sha256(text.encode()))
+        )
         print(f"{len(text):>7,} text chars  {out.relative_to(RAW_DIR)}")
     update_manifest(2, entries)
 

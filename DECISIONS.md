@@ -293,3 +293,9 @@ alternatives and rationale. Newest entries at the bottom.
 - **Rejected alternatives:** Deleting documents that are absent from the manifest.
 - **Rationale:** The v1 corpus is fixed at 14 sources, so deletion would add a destructive code path with no current use. Revisit if the source list changes.
 - **Date:** 2026-10-19
+
+## 2026-10-19 Frontend stack: React + Vite + TypeScript
+
+**Decision**: The step 11 frontend is a React + Vite + TypeScript single page (question input, answer, cited sources) that calls the FastAPI `/query` endpoint. Claude Code scaffolds it; I write the input and answer components myself.
+**Rejected alternatives**: Next.js (the CLAUDE.md stack until now: SSR, SEO, and file-based routing go unused on a single page, and its API routes overlap with the FastAPI backend)
+**Rationale**: The frontend is one page with no SEO needs, so a client-side build that Vercel serves as static files is enough. Vite has fewer concepts than Next.js, so I can explain the choice in an interview. The page also gives me hands-on React and TypeScript practice, which full-stack interviews test directly.

@@ -20,6 +20,8 @@ API = "https://www.ecfr.gov/api/versioner/v1"
 TITLE = 8
 HIERARCHY = {"chapter": "I", "subchapter": "B", "part": "214", "section": "214.2"}
 OUT = RAW_DIR / "ecfr" / "8-cfr-214.2.xml"
+# Only paragraph (f) gets ingested, so the source id names (f), not the whole section.
+SOURCE_ID = "ecfr-214.2f"
 
 
 def recorded_issue_date() -> str | None:
@@ -50,7 +52,7 @@ def main() -> None:
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_bytes(resp.content)
-    update_manifest(1, [manifest_entry(1, resp, OUT)], ecfr_issue_date=issue_date)
+    update_manifest(1, [manifest_entry(SOURCE_ID, 1, resp, OUT)], ecfr_issue_date=issue_date)
     print(f"issue date {issue_date}: {len(resp.content):,} bytes -> {OUT.relative_to(RAW_DIR)}")
 
 

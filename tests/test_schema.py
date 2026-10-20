@@ -103,13 +103,14 @@ def test_05_cosine_distance_ignores_vector_length(db):
     assert rows[3][1] == pytest.approx(2, abs=1e-6)
 
 
-# 6. version_date is required.
+# 6. version_date is required. Every other NOT NULL column is supplied, so the
+# error can only come from version_date.
 def test_06_document_requires_version_date(db):
-    with pytest.raises(errors.NotNullViolation):
+    with pytest.raises(errors.NotNullViolation, match="version_date"):
         db.execute(
             """
-            insert into documents (source_tier, title, url)
-            values ('ecfr', 'No date', 'https://example.test/no-date')
+            insert into documents (source_id, source_tier, title, url)
+            values ('test-no-date', 'ecfr', 'No date', 'https://example.test/no-date')
             """
         )
 
@@ -122,6 +123,24 @@ def test_07_source_tier_check(db):
 
     insert_document(db, source_tier="ecfr", url="https://example.test/ecfr")
     insert_document(db, source_tier="sits", url="https://example.test/sits")
+
+
+# Extra (Claude): source_id is required.
+def test_extra_document_requires_source_id(db):
+    with pytest.raises(errors.NotNullViolation, match="source_id"):
+        db.execute(
+            """
+            insert into documents (source_tier, title, url, version_date)
+            values ('ecfr', 'No id', 'https://example.test/no-id', '2026-10-01')
+            """
+        )
+
+
+# Extra (Claude): two documents cannot share a source_id.
+def test_extra_source_id_unique(db):
+    insert_document(db, source_id="ecfr-214.2f")
+    with pytest.raises(errors.UniqueViolation):
+        insert_document(db, source_id="ecfr-214.2f", url="https://example.test/other")
 
 
 # Extra (Claude): a chunk pointing to a missing document is rejected.
@@ -162,8 +181,9 @@ def test_extra_grants_only_to_service_role(db):
 
 
 # 8. Publishable key gets a permission error on chunks; secret key reads the data.
-# Runs against the local stack by default, or OPT-RAG with `--target opt-rag`.
-# Writes one marked test document through the secret key and deletes it afterwards.
+# Local stack only; the OPT-RAG mode was retired in step 07 (DECISIONS.md,
+# "Cloud mode for test 8 retired"). Writes one marked test document through the
+# secret key and deletes it afterwards.
 def test_08_data_api_access_by_key(env):
     rest = f"{env['SUPABASE_URL']}/rest/v1"
     secret = {"apikey": env["SUPABASE_SECRET_KEY"]}
@@ -174,6 +194,7 @@ def test_08_data_api_access_by_key(env):
         f"{rest}/documents",
         headers=secret_with_return,
         json={
+            "source_id": "pytest-step-06-access-check",
             "source_tier": "ecfr",
             "title": "pytest step 06 access check (safe to delete)",
             "url": "https://example.test/pytest-step-06",

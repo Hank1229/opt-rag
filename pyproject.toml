@@ -4,8 +4,11 @@ version = "0.1.0"
 description = "Minimal RAG pipeline over Supabase pgvector with Gemini"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "beautifulsoup4>=4.15.0",
     "fastapi",
     "httpx>=0.28.1",
+    "psycopg[binary]>=3.3.6",
+    "python-dotenv>=1.2.3",
     "uvicorn[standard]",
 ]
 
@@ -18,6 +21,5 @@ packages = ["app"]
 
 [dependency-groups]
 dev = [
-    "psycopg[binary]>=3.3.6",
     "pytest>=9.1.1",
 ]

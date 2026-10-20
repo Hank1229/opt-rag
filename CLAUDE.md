@@ -8,21 +8,23 @@ every design decision must be explainable and every improvement must
 show up as a number.
 
 Stack: FastAPI + Supabase pgvector + Gemini (embedding and generation) +
-Ragas + Next.js frontend. Deploy: Fly.io/Railway + Vercel.
+Ragas + React + Vite + TypeScript frontend. Deploy: Fly.io/Railway + Vercel.
 
 ## Locked decisions (do not change without asking)
 
 - Corpus: two tiers. Tier 1 = full 8 CFR 214.2(f) via eCFR API.
   Tier 2 = Study in the States student pages from a fixed URL list.
-  Fetch scripts + manifest (per file: tier, url, final_url, path,
+  Fetch scripts + manifest (per file: source_id, tier, url, final_url, path,
   fetched_at, bytes, raw_sha256, plus content_sha256 for Tier 2;
   top level: ecfr_issue_date), raw files in data/raw/, committed.
 - Chunking: structure-aware. Tier 1 splits on paragraph hierarchy,
-  paragraph ID in metadata as citation key. Tier 2 splits on h2/h3.
+  paragraph ID in metadata as citation key. Tier 2: h2-h5 headings and
+  each accordion question start a section.
   Paragraphs over ~800 tokens fall back to fixed-size splits keeping
   the parent ID.
-- Embedding: Gemini, truncated to 768 dims (MRL). Cosine distance,
-  vector_cosine_ops.
+- Embedding: Gemini `gemini-embedding-001`, truncated to 768 dims
+  (MRL), L2-normalized. Task type RETRIEVAL_DOCUMENT for chunks,
+  RETRIEVAL_QUERY for questions. Cosine distance, vector_cosine_ops.
 - Retrieval: top-k = 5 baseline.
 - Query endpoint: /query (the name used in code, docs, and diagrams).
 - Generation prompt: labeled sources, mandatory citations, refusal
@@ -46,6 +48,9 @@ Ragas + Next.js frontend. Deploy: Fly.io/Railway + Vercel.
   change his expected results. You may add extra edge cases, but label
   them as yours in the test name or a comment.
 - pytest is an allowed dev dependency; tests live in tests/.
+- Tests run against local Supabase only. `pytest --target opt-rag` is
+  retired and exits without running anything (DECISIONS.md, Step 07
+  "Cloud mode for test 8 retired").
 - After each step, report:
   1. files changed and the diff
   2. the exact command Hank should run to check it himself, and what

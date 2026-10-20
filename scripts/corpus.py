@@ -1,8 +1,9 @@
 """Shared helpers for the corpus fetch scripts: HTTP client, raw file paths, manifest.
 
 The manifest (data/raw/manifest.json) is a single JSON file shaped like:
-    {"ecfr_issue_date": "...", "entries": [{"tier": 1, "url": "...", ...}, ...]}
-Each fetch script owns one tier and only ever rewrites that tier's entries.
+    {"ecfr_issue_date": "...", "entries": [{"source_id": "ecfr-214.2f", "tier": 1, ...}, ...]}
+Each fetch script owns one tier and only ever rewrites that tier's entries. An
+entry's source_id is stable, so ingest finds the same document again after a refetch.
 """
 
 import hashlib
@@ -28,13 +29,14 @@ def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def manifest_entry(tier: int, resp: httpx.Response, path: Path, **extra) -> dict:
+def manifest_entry(source_id: str, tier: int, resp: httpx.Response, path: Path, **extra) -> dict:
     """One manifest record for a raw file written from `resp`."""
     # resp.url is where we ended up after redirects; history[0] is what we asked for.
     requested_url = resp.history[0].url if resp.history else resp.url
     fetched_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     return {
+        "source_id": source_id,
         "tier": tier,
         "url": str(requested_url),
         "final_url": str(resp.url),
