@@ -64,6 +64,14 @@ Ragas + React + Vite + TypeScript frontend. Deploy: Fly.io/Railway + Vercel.
   prompt change.
 - Do not install packages, create databases, or add schema fields
   beyond what the current step needs.
+- Any migration that creates a table must revoke all privileges from
+  anon and authenticated and grant only what the backend needs to
+  service_role, following
+  supabase/migrations/20261017004311_create_documents_and_chunks.sql.
+  Do not use Supabase's default grant template (it grants anon
+  select). If a step adds a SQL function called through the Data API,
+  revoke execute from public, anon, and authenticated and grant it to
+  service_role.
 - Never write eval questions. Draft reference answers and citations
   only when Hank explicitly asks, for questions he wrote, in the
   format: short answer + verbatim source quote + citation.
