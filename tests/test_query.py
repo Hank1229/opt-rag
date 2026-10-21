@@ -282,8 +282,8 @@ def test_generator_retries_503_then_succeeds():
     assert len(sleeps) == 2
 
 
-# Retry: three 503s in a row give up with GenerationError after three attempts.
-def test_generator_gives_up_after_three_503s():
+# Retry: five 503s in a row give up with GenerationError after five attempts.
+def test_generator_gives_up_after_five_503s():
     calls = []
 
     def unavailable(request):
@@ -292,7 +292,19 @@ def test_generator_gives_up_after_three_503s():
 
     with pytest.raises(GenerationError, match="503"):
         generator_for(unavailable).complete("prompt text")
-    assert len(calls) == 3
+    assert len(calls) == 5
+
+
+# Retry: a 429 asking for an hour sleeps at most 60 seconds per retry.
+def test_generator_retry_delay_is_capped_at_60_seconds():
+    sleeps = []
+
+    def daily_quota(request):
+        return httpx.Response(429, json={"error": {"details": [{"retryDelay": "3600s"}]}})
+
+    with pytest.raises(GenerationError, match="429"):
+        generator_for(daily_quota, sleeps).complete("prompt text")
+    assert sleeps == [60] * 4
 
 
 # Extra (Claude): other HTTP errors are not retried; replies without an answer (e.g. blocked prompts) raise.

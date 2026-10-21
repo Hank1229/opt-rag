@@ -307,7 +307,7 @@ alternatives and rationale. Newest entries at the bottom.
 **Rejected alternatives**: supabase client via an RPC function (adds a SQL function and a migration, splits retrieval logic across two places); schema-qualified operators in SQL or `ALTER ROLE` search_path (hard to read, or hidden in the database and easy to miss in a new environment); one function doing retrieval and generation together (eval would have to split it later); cosine distance threshold for refusal (no principled value, and it would mix with prompt-based refusal in the refusal experiment); returning chunk content in the response (larger payload, the frontend does not need it, eval calls `retrieve` directly).
 **Rationale**: One connection setup for ingest and retrieval, one place to change k or the SQL. The retrieve/generate split lets step 10 compute hit@5 and MRR without the generator and run the bare-Gemini arm with the same prompt minus context. Prompt-only refusal keeps one variable for the baseline. The response carries citation_key for eval and url so a user can open the source and match the number in the answer.
 **Note**: `app/ingest/store.py` still casts with `::extensions.vector`; it works and stays until ingest is next touched.
-**Caught**: the live test hung for 2h51m because app/embedding.py slept for the full retryDelay Gemini returned on a 429 with no cap; fixed with a 60-second cap and 5-attempt limit. The live test also re-embedded all 266 chunks on every run, burning quota; it now uses the existing local data and skips when the corpus is missing.
+**Caught**: the live test hung for 2h51m because app/embedding.py slept for the full retryDelay Gemini returned on a 429 with no cap; fixed with a 60-second cap and 5-attempt limit. The live test also re-embedded all 266 chunks on every run, burning quota; it now uses the existing local data and skips when the corpus is missing. app/generation.py had the same uncapped retryDelay sleep; it now uses the same 60-second cap and a 5-attempt limit.
 
 ## Step 08: Retrieval and /query
 
@@ -335,4 +335,10 @@ alternatives and rationale. Newest entries at the bottom.
 - **Decision:** The server reads settings from the process environment, then `.env`, except `DATABASE_URL`, which comes from the process environment only. Locally it is set from `supabase status`; in deployment it is a secret.
 - **Rejected alternatives:** Reading `DATABASE_URL` from `.env`.
 - **Rationale:** `.env`'s `DATABASE_URL` points at OPT-RAG. Same reasoning as Step 07 "Local ingest reads the database URL from supabase status": a local run cannot reach OPT-RAG by accident.
+- **Date:** 2026-10-21
+
+### Ingest caches embeddings in a local file keyed by content hash
+- **Decision:** Ingest keys each text by the sha256 of the exact string sent to the API (contextual header included) and stores vectors in `data/cache/embeddings.jsonl`, which is gitignored. The cache is read before calling Gemini; misses go to the API and are appended.
+- **Rejected alternatives:** Re-embedding the whole corpus on every database reset; storing vectors in git.
+- **Rationale:** The corpus is frozen, so its vectors never change. Four full re-embeds in one day exhausted the free-tier quota.
 - **Date:** 2026-10-21

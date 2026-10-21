@@ -32,6 +32,7 @@ from app.ingest.store import write_document
 
 ROOT = Path(__file__).resolve().parents[2]
 PREVIEW_CHARS = 200
+EMBEDDING_CACHE = ROOT / "data" / "cache" / "embeddings.jsonl"
 
 
 def parse_args(argv) -> argparse.Namespace:
@@ -126,7 +127,7 @@ def main(argv=None, embedder=None) -> int:
 
     conninfo = database_url(args.target)
     print(f"target: {args.target} (host {conninfo_to_dict(conninfo).get('host')})")
-    embedder = embedder or GeminiEmbedder(env_value("GEMINI_API_KEY"))
+    embedder = embedder or GeminiEmbedder(env_value("GEMINI_API_KEY"), cache=EMBEDDING_CACHE)
 
     started = time.monotonic()
     failed = []

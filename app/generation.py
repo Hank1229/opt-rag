@@ -10,12 +10,12 @@ import time
 
 import httpx
 
-from app.embedding import RETRY_DELAY_RE, backoff_seconds
+from app.embedding import MAX_BACKOFF_SECONDS, RETRY_DELAY_RE, backoff_seconds
 from app.retrieval import Hit
 
 ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 RETRY_STATUSES = {429, 503}
-MAX_ATTEMPTS = 3
+MAX_ATTEMPTS = 5
 REFUSAL = (
     "The provided sources do not contain the answer to this question. "
     "Please ask your Designated School Official (DSO)."
@@ -69,12 +69,12 @@ class GeminiGenerator:
             response = self.client.post(ENDPOINT.format(model=self.model), json=body, headers=self.headers)
             if response.status_code not in RETRY_STATUSES or attempt == MAX_ATTEMPTS:
                 break
-            # Same backoff as embedding, including the 429 retryDelay hint.
+            # Same backoff as embedding: the 429 retryDelay hint, capped at 60 seconds.
             delay = backoff_seconds(attempt)
             hint = RETRY_DELAY_RE.search(response.text)
             if hint:
                 delay = max(delay, float(hint.group(1)) + 1)
-            self.sleep(delay)
+            self.sleep(min(delay, MAX_BACKOFF_SECONDS))
         if response.status_code != 200:
             raise GenerationError(f"Gemini generation failed, HTTP {response.status_code}: {response.text[:300]}")
         reply = response.json()

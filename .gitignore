@@ -12,3 +12,6 @@ __pycache__/
 
 # Ingest chunk reports (scripts/ingest.py)
 reports/
+
+# Embedding cache for ingest (app/embedding.py), rebuilt from the API
+data/cache/

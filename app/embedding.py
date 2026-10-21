@@ -1,14 +1,18 @@
-"""Gemini embeddings over the REST API: batched, retried on 429/5xx, L2-normalized.
+"""Gemini embeddings over the REST API: batched, retried on 429/5xx, L2-normalized,
+optionally cached in a local JSONL file so a rerun of ingest re-embeds nothing.
 
 Model, size, and task type are locked: CLAUDE.md "Embedding" and DECISIONS.md,
 Step 07 "Embedding model and task types". The API key goes in a request header,
 never the URL, so it can't leak through logged URLs or error messages.
 """
 
+import hashlib
+import json
 import math
 import random
 import re
 import time
+from pathlib import Path
 
 import httpx
 
@@ -27,17 +31,33 @@ class EmbeddingError(RuntimeError):
 
 
 class GeminiEmbedder:
-    def __init__(self, api_key: str, task_type: str = "RETRIEVAL_DOCUMENT", client=None, sleep=time.sleep):
+    def __init__(
+        self,
+        api_key: str,
+        task_type: str = "RETRIEVAL_DOCUMENT",
+        client=None,
+        sleep=time.sleep,
+        cache: Path | None = None,
+    ):
         self.task_type = task_type
         self.headers = {"x-goog-api-key": api_key}
         self.client = client or httpx.Client(timeout=60)
         self.sleep = sleep
+        # Keyed by text only, so one cache file must only ever see one task type (ingest's).
+        self.cache = cache
+        self.cached = load_cache(cache) if cache else {}
 
     def embed(self, texts: list[str]) -> list[list[float]]:
-        """One unit vector per text, in order."""
-        vectors = []
-        for start in range(0, len(texts), BATCH_SIZE):
-            vectors += self._embed_batch(texts[start : start + BATCH_SIZE])
+        """One unit vector per text, in order; texts already in the cache skip the API."""
+        misses = [t for t in texts if text_hash(t) not in self.cached]
+        fresh = []
+        for start in range(0, len(misses), BATCH_SIZE):
+            fresh += self._embed_batch(misses[start : start + BATCH_SIZE])
+        new = dict(zip(map(text_hash, misses), fresh))
+        vectors = [self.cached.get(text_hash(t)) or new[text_hash(t)] for t in texts]
+        if self.cache and new:
+            append_cache(self.cache, new)
+            self.cached.update(new)
         return vectors
 
     def _embed_batch(self, texts: list[str]) -> list[list[float]]:
@@ -79,6 +99,24 @@ class GeminiEmbedder:
             # A daily-quota 429 can ask for hours; give up after MAX_ATTEMPTS instead of sleeping that long.
             self.sleep(min(delay, MAX_BACKOFF_SECONDS))
         raise AssertionError("unreachable")
+
+
+def text_hash(text: str) -> str:
+    return hashlib.sha256(text.encode()).hexdigest()
+
+
+def load_cache(path: Path) -> dict[str, list[float]]:
+    if not path.exists():
+        return {}
+    with path.open() as lines:
+        return {entry["sha256"]: entry["values"] for entry in map(json.loads, lines)}
+
+
+def append_cache(path: Path, vectors: dict[str, list[float]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a") as out:
+        for key, values in vectors.items():
+            out.write(json.dumps({"sha256": key, "values": values}) + "\n")
 
 
 def backoff_seconds(attempt: int) -> float:

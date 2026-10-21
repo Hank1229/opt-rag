@@ -1,6 +1,6 @@
-"""Step 07 embedder tests against a mocked HTTP transport; no real Gemini calls.
+"""Embedder tests against a mocked HTTP transport; no real Gemini calls.
 
-All tests here are extra edge cases added by Claude (not in Hank's expected results).
+Tests marked "Extra" are edge cases added by Claude; the rest test Hank's decisions.
 """
 
 import json
@@ -14,9 +14,10 @@ from app.embedding import DIMENSIONS, MAX_ATTEMPTS, MODEL, EmbeddingError, Gemin
 FAKE_KEY = "test-key-not-real"
 
 
-def embedder_for(handler, sleeps=None):
+def embedder_for(handler, sleeps=None, cache=None):
     client = httpx.Client(transport=httpx.MockTransport(handler))
-    return GeminiEmbedder(FAKE_KEY, client=client, sleep=(sleeps.append if sleeps is not None else lambda s: None))
+    sleep = sleeps.append if sleeps is not None else lambda s: None
+    return GeminiEmbedder(FAKE_KEY, client=client, sleep=sleep, cache=cache)
 
 
 def ok_response(request: httpx.Request) -> httpx.Response:
@@ -111,6 +112,27 @@ def test_retry_delay_is_capped_at_60_seconds():
         embedder_for(daily_quota, sleeps).embed(["a"])
     assert len(calls) == 5
     assert sleeps == [60] * 4
+
+
+# Cache: the same two texts embedded again, by a new embedder on the same file, make zero requests.
+def test_cache_skips_api_for_seen_texts(tmp_path):
+    calls = []
+
+    def handler(request):
+        calls.append(1)
+        texts = [r["content"]["parts"][0]["text"] for r in json.loads(request.content)["requests"]]
+        # A different vector per text, so a mix-up between texts would show.
+        return httpx.Response(200, json={"embeddings": [{"values": [0.0] * i + [1.0] + [0.0] * (DIMENSIONS - i - 1)} for i in map(len, texts)]})
+
+    cache = tmp_path / "cache" / "embeddings.jsonl"
+    texts = ["Header\nfirst chunk", "Header\nthe second chunk"]
+    first = embedder_for(handler, cache=cache).embed(texts)
+    assert len(calls) == 1
+
+    second = embedder_for(handler, cache=cache).embed(texts)
+    assert len(calls) == 1
+    assert second == first
+    assert first[0] != first[1]
 
 
 # Extra (Claude): a response with the wrong number of vectors or dims is an error.
