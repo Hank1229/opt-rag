@@ -15,6 +15,8 @@ import httpx
 import psycopg
 import pytest
 
+from app.db import connect
+
 ROOT = Path(__file__).resolve().parent.parent
 RAW_DIR = ROOT / "data" / "raw"
 TARGETS = ("local", "opt-rag")
@@ -85,8 +87,13 @@ def wait_for_data_api(env: dict[str, str], timeout: float = 30.0) -> None:
 
 
 @pytest.fixture(scope="session", autouse=True)
-def fresh_database(env):
-    """Drop everything and re-apply supabase/migrations to an empty database."""
+def fresh_database(env, request):
+    """Drop everything and re-apply supabase/migrations to an empty database.
+
+    Skipped for `-m live`: the live test reads the corpus already ingested locally.
+    """
+    if request.config.getoption("markexpr") == "live":
+        return
     result = subprocess.run(
         ["supabase", "db", "reset"], cwd=ROOT, capture_output=True, text=True
     )
@@ -114,6 +121,15 @@ def ingest_db(env):
         empty_tables(conn)
         yield conn
         empty_tables(conn)
+
+
+@pytest.fixture
+def app_db(env):
+    """Connection opened the way the app opens it, on empty tables; everything is rolled back."""
+    with connect(env["DATABASE_URL"]) as conn:
+        empty_tables(conn)
+        yield conn
+        conn.rollback()
 
 
 @pytest.fixture

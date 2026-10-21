@@ -88,10 +88,16 @@ Ragas + React + Vite + TypeScript frontend. Deploy: Fly.io/Railway + Vercel.
 - All files, comments, and docs in English.
 - Code comments: file header states what the file does, important
   functions get one brief line, skip comments that restate the code.
+- Load the pragmatic-code-style skill before writing or editing any
+  code, and apply it to the diff you produce. Do not refactor files
+  outside the current step's scope.
+- Before reporting a step as done, re-read your own diff against that
+  skill and fix what it flags.
 
 ## Current state
 
 - Skeleton done: uv, FastAPI /health, .env.example, first commit made.
 - Fetch scripts and raw corpus snapshot done (eCFR 8 CFR 214.2 at
   issue date 2026-10-01, 13 Study in the States pages).
-- Next: Supabase schema, then ingest.
+- Steps 06-08 done: Supabase schema, ingest, retrieval + /query.
+- Next: step 09 (eval dataset).

@@ -90,6 +90,7 @@ alternatives and rationale. Newest entries at the bottom.
 **Decision**: These are planned for v2 and start only after v1 (steps 06 to 13) ships: Langfuse tracing, hybrid search, reranking, chunking experiments, refusal experiments, and Jev refusal-gating. They stay out of CLAUDE.md's stack and out of v1 code, but they are not cancelled.
 **Rejected alternatives**: building any of them during v1 (expands scope before the core pipeline and baseline eval exist); dropping them (they are the experiments that turn the baseline into measured improvements).
 **Rationale**: v1 needs a working pipeline and a frozen baseline first. Each v2 item is one variable to change and re-measure against that baseline.
+**Added 2026-10-21**: Generation model upgrade from `gemini-3.6-flash` to a newer Gemini Flash (e.g. `gemini-3.8-flash`), run as a one-variable experiment against the baseline.
 
 ## Step 06: Database schema
 
@@ -299,3 +300,39 @@ alternatives and rationale. Newest entries at the bottom.
 **Decision**: The step 11 frontend is a React + Vite + TypeScript single page (question input, answer, cited sources) that calls the FastAPI `/query` endpoint. Claude Code scaffolds it; I write the input and answer components myself.
 **Rejected alternatives**: Next.js (the CLAUDE.md stack until now: SSR, SEO, and file-based routing go unused on a single page, and its API routes overlap with the FastAPI backend)
 **Rationale**: The frontend is one page with no SEO needs, so a client-side build that Vercel serves as static files is enough. Vite has fewer concepts than Next.js, so I can explain the choice in an interview. The page also gives me hands-on React and TypeScript practice, which full-stack interviews test directly.
+
+## 2026-10-21 Step 08 retrieval and /query
+
+**Decision**: psycopg direct connection for retrieval, sharing one connect() helper with ingest, with `search_path=public,extensions` set on the connection. Query embedding reuses `app/embedding.py` with `RETRIEVAL_QUERY` and no contextual header. `retrieve(question, k)` and `generate(question, chunks)` are separate functions; `/query` composes them. Refusal is prompt-only, no distance threshold. `/query` returns `{answer, sources: [{label, citation_key, title, source_tier, url, distance}]}` with no chunk content. Model name, temperature (baseline 0) and top-k (5) come from env vars. Tests use fake vectors for SQL, mock Gemini for prompt and endpoint, and one live test behind a `live` marker.
+**Rejected alternatives**: supabase client via an RPC function (adds a SQL function and a migration, splits retrieval logic across two places); schema-qualified operators in SQL or `ALTER ROLE` search_path (hard to read, or hidden in the database and easy to miss in a new environment); one function doing retrieval and generation together (eval would have to split it later); cosine distance threshold for refusal (no principled value, and it would mix with prompt-based refusal in the refusal experiment); returning chunk content in the response (larger payload, the frontend does not need it, eval calls `retrieve` directly).
+**Rationale**: One connection setup for ingest and retrieval, one place to change k or the SQL. The retrieve/generate split lets step 10 compute hit@5 and MRR without the generator and run the bare-Gemini arm with the same prompt minus context. Prompt-only refusal keeps one variable for the baseline. The response carries citation_key for eval and url so a user can open the source and match the number in the answer.
+**Note**: `app/ingest/store.py` still casts with `::extensions.vector`; it works and stays until ingest is next touched.
+**Caught**: the live test hung for 2h51m because app/embedding.py slept for the full retryDelay Gemini returned on a 429 with no cap; fixed with a 60-second cap and 5-attempt limit. The live test also re-embedded all 266 chunks on every run, burning quota; it now uses the existing local data and skips when the corpus is missing.
+
+## Step 08: Retrieval and /query
+
+### eCFR source links use the stored citation key as the anchor
+- **Decision:** Tier 1 source URL is `documents.url + "#p-" + citation_key`, e.g. `.../section-214.2#p-214.2(f)(10)(ii)(A)`. Tier 2 URL is `documents.url` unchanged. Built in one Python function; no schema change.
+- **Rejected alternatives:** `documents.url + "#p-214.2" + citation_key` with the prefix stripped from the key first.
+- **Rationale:** Stored eCFR keys already start with `214.2`, and eCFR's paragraph anchors use the same `p-214.2(f)...` form, so the key goes in unchanged.
+- **Caught:** The step 08 plan said `"#p-214.2" + citation_key` with example key `(f)(10)(ii)(A)`. Querying the local database before writing code showed stored keys look like `214.2(f)(10)(ii)(A)`, so the plan would have produced `#p-214.2214.2(f)...`. Fixed by using `"#p-" + citation_key`; expected result 5 now uses the stored key form.
+- **Date:** 2026-10-21
+
+### Source labels
+- **Decision:** Tier 1 label is `[n] 8 CFR <citation_key>` (e.g. `[1] 8 CFR 214.2(f)(10)(ii)(A)`). Tier 2 label is `[n] <documents.title> <citation_key>`. The same string appears in the prompt and in the `/query` response.
+- **Rejected alternatives:** `[n] <documents.title> <citation_key>` for both tiers.
+- **Rationale:** The 2026-09-01 prompt decision already used the form [1] 8 CFR 214.2(f)(10)(ii)(A). The Tier 1 title is the whole section name, so it adds nothing a reader cannot get from the citation key, and repeating a 200-character title five times per prompt only adds tokens. Tier 2 keeps the title because its citation key is a heading slug that does not identify the page on its own.
+- **Date:** 2026-10-21
+
+### Generation model pinned to `gemini-3.6-flash`
+- **Decision:** `GEMINI_GENERATION_MODEL=gemini-3.6-flash`, temperature 0, both from env vars. The generator raises if the reply's `modelVersion` differs from the configured model.
+- **Rejected alternatives:** `gemini-2.5-flash` (returns 404 "no longer available to new users"; 2.5-pro and 2.5-flash-lite too); a versioned id such as `gemini-2.5-flash-001` (none exist in the API); `gemini-3.8-flash` (newest, less settled; moved to the v2 backlog as an upgrade experiment); `gemini-3.7-flash` (503 high demand when probed).
+- **Rationale:** A model name can be served by a newer model: a request to `gemini-3.5-flash` came back with `modelVersion` `gemini-3.6-flash`. The eval baseline must not change models silently, so a mismatch fails loudly. `gemini-3.6-flash` answered as itself.
+- **Caught:** Probing `generateContent` before writing code showed the first choice, `gemini-2.5-flash`, is unavailable, and that `gemini-3.5-flash` is silently redirected. Fixed by pinning `gemini-3.6-flash` and adding the `modelVersion` check.
+- **Date:** 2026-10-21
+
+### The API server reads DATABASE_URL from the process environment only
+- **Decision:** The server reads settings from the process environment, then `.env`, except `DATABASE_URL`, which comes from the process environment only. Locally it is set from `supabase status`; in deployment it is a secret.
+- **Rejected alternatives:** Reading `DATABASE_URL` from `.env`.
+- **Rationale:** `.env`'s `DATABASE_URL` points at OPT-RAG. Same reasoning as Step 07 "Local ingest reads the database URL from supabase status": a local run cannot reach OPT-RAG by accident.
+- **Date:** 2026-10-21

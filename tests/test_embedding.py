@@ -98,6 +98,21 @@ def test_extra_gives_up():
     assert len(calls) == MAX_ATTEMPTS
 
 
+# A 429 asking for an hour sleeps at most 60 seconds per retry and gives up after 5 attempts.
+def test_retry_delay_is_capped_at_60_seconds():
+    calls = []
+    sleeps = []
+
+    def daily_quota(request):
+        calls.append(1)
+        return httpx.Response(429, json={"error": {"details": [{"retryDelay": "3600s"}]}})
+
+    with pytest.raises(EmbeddingError, match="after 5 attempts"):
+        embedder_for(daily_quota, sleeps).embed(["a"])
+    assert len(calls) == 5
+    assert sleeps == [60] * 4
+
+
 # Extra (Claude): a response with the wrong number of vectors or dims is an error.
 def test_extra_rejects_malformed_response():
     def wrong_dims(request):

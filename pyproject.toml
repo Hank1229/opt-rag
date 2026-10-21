@@ -23,3 +23,7 @@ packages = ["app"]
 dev = [
     "pytest>=9.1.1",
 ]
+
+[tool.pytest.ini_options]
+addopts = "-m 'not live'"
+markers = ["live: calls the real Gemini API; run with `uv run pytest -m live`"]

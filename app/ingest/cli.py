@@ -21,10 +21,10 @@ import sys
 import time
 from pathlib import Path
 
-import psycopg
 from dotenv import dotenv_values
 from psycopg.conninfo import conninfo_to_dict
 
+from app.db import connect
 from app.embedding import GeminiEmbedder
 from app.ingest import chunking
 from app.ingest.chunking import MAX_TOKENS, Document, count_tokens
@@ -130,7 +130,7 @@ def main(argv=None, embedder=None) -> int:
 
     started = time.monotonic()
     failed = []
-    with psycopg.connect(conninfo, autocommit=True) as conn:
+    with connect(conninfo, autocommit=True) as conn:
         for doc in documents:
             try:
                 vectors = embedder.embed([c.embed_text for c in doc.chunks])

@@ -17,7 +17,7 @@ DIMENSIONS = 768
 BATCH_SIZE = 100  # API limit per batchEmbedContents request
 ENDPOINT = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:batchEmbedContents"
 RETRY_STATUSES = {429, 500, 502, 503, 504}
-MAX_ATTEMPTS = 6
+MAX_ATTEMPTS = 5
 MAX_BACKOFF_SECONDS = 60
 RETRY_DELAY_RE = re.compile(r'"retryDelay":\s*"(\d+(?:\.\d+)?)s"')
 
@@ -76,7 +76,8 @@ class GeminiEmbedder:
                     delay = max(delay, float(hint.group(1)) + 1)
             if attempt == MAX_ATTEMPTS:
                 raise EmbeddingError(f"Gemini embedding request failed after {attempt} attempts, {problem}")
-            self.sleep(delay)
+            # A daily-quota 429 can ask for hours; give up after MAX_ATTEMPTS instead of sleeping that long.
+            self.sleep(min(delay, MAX_BACKOFF_SECONDS))
         raise AssertionError("unreachable")
 
 
