@@ -104,13 +104,16 @@ class GeminiEmbedder:
                     raise EmbeddingError(f"Gemini embedding request failed, {problem}")
             if attempt == MAX_ATTEMPTS:
                 raise EmbeddingError(f"Gemini embedding request failed after {attempt} attempts, {problem}")
-            wait_to_retry(attempt, reply, self.sleep)
+            try:
+                wait_to_retry(attempt, reply, self.sleep)
+            except RetryDelayTooLong as exc:
+                raise EmbeddingError(str(exc)) from exc
         raise AssertionError("unreachable")
 
 
 def wait_to_retry(attempt: int, reply: str, sleep) -> None:
-    """Sleep before the next attempt: Gemini's retryDelay hint if the reply has one, else backoff.
-    A hint over 60 seconds (a daily quota) raises instead: no retry would succeed in time."""
+    """Sleep before the next attempt: Gemini's retryDelay hint plus a second if the reply has one,
+    else backoff. A hint over 60 seconds (a daily quota) raises instead: no retry would succeed in time."""
     hint = RETRY_DELAY_RE.search(reply)
     if not hint:
         sleep(backoff_seconds(attempt))
@@ -118,7 +121,7 @@ def wait_to_retry(attempt: int, reply: str, sleep) -> None:
     seconds = float(hint.group(1))
     if seconds > MAX_BACKOFF_SECONDS:
         raise RetryDelayTooLong(f"Gemini asked to retry in {seconds:g} s, over the {MAX_BACKOFF_SECONDS} s limit: {reply[:300]}")
-    sleep(seconds)
+    sleep(seconds + 1)
 
 
 def load_cache(path: Path) -> dict[str, list[float]]:

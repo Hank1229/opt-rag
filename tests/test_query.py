@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 
 from app import main as api
 from app.db import connect
-from app.embedding import RetryDelayTooLong
+from app.embedding import RetryDelayTooLong, wait_to_retry
 from app.generation import DISCLAIMER, REFUSAL, GeminiGenerator, GenerationError, build_prompt
 from app.retrieval import Hit, query_embedder, retrieve
 from helpers import EMBEDDING_DIMS, insert_chunk, insert_document, unit_vector
@@ -297,7 +297,8 @@ def test_generator_gives_up_after_five_503s():
 
 
 # Cache/retry fix 4 (generator; replaces the 60-second cap test): an hour-long retryDelay hint
-# gives up after one call and no sleep; a 7-second hint is retried with 7-second sleeps, 5 attempts at most.
+# gives up after one call and no sleep; a 7-second hint is retried with 8-second sleeps
+# (follow-up 2: 1-second buffer), 5 attempts at most.
 def test_generator_retries_follow_the_shared_helper():
     calls = []
     sleeps = []
@@ -306,7 +307,7 @@ def test_generator_retries_follow_the_shared_helper():
         calls.append(1)
         return httpx.Response(429, json={"error": {"details": [{"retryDelay": "3600s"}]}})
 
-    with pytest.raises(RetryDelayTooLong):
+    with pytest.raises(GenerationError, match="3600"):
         generator_for(daily_quota, sleeps).complete("prompt text")
     assert len(calls) == 1
     assert sleeps == []
@@ -320,7 +321,20 @@ def test_generator_retries_follow_the_shared_helper():
     with pytest.raises(GenerationError, match="429"):
         generator_for(short_quota, sleeps).complete("prompt text")
     assert len(calls) == 5
-    assert sleeps == [7] * 4
+    assert sleeps == [8] * 4
+
+
+# Cache/retry follow-up 3 (generator): RetryDelayTooLong does not escape complete(); it comes out as
+# GenerationError with the helper's original message.
+def test_generator_reraises_long_delay_as_generation_error():
+    reply = json.dumps({"error": {"details": [{"retryDelay": "3600s"}]}})
+    with pytest.raises(RetryDelayTooLong) as helper_error:
+        wait_to_retry(1, reply, lambda seconds: None)
+
+    with pytest.raises(GenerationError) as raised:
+        generator_for(lambda request: httpx.Response(429, text=reply)).complete("prompt text")
+    assert type(raised.value) is GenerationError
+    assert str(raised.value) == str(helper_error.value)
 
 
 # Extra (Claude): other HTTP errors are not retried; replies without an answer (e.g. blocked prompts) raise.

@@ -93,7 +93,7 @@ def test_extra_retries_429_and_5xx():
 
     assert len(embedder_for(handler, sleeps).embed(["a"])) == 1
     assert len(sleeps) == 2
-    assert sleeps[0] == 7
+    assert sleeps[0] == 8  # retryDelay 7s plus a 1-second buffer
 
 
 # Extra (Claude): a 400 is not retried; persistent 500s give up after MAX_ATTEMPTS.
@@ -119,8 +119,8 @@ def test_extra_gives_up():
     assert len(calls) == MAX_ATTEMPTS
 
 
-# Extra (Claude), was the 60-second cap test: a hint of exactly 60 seconds is still slept,
-# and the retries stop after 5 attempts.
+# Extra (Claude), was the 60-second cap test: a hint of exactly 60 seconds is still slept (plus the
+# 1-second buffer), and the retries stop after 5 attempts.
 def test_extra_hint_of_60_seconds_is_slept():
     calls = []
     sleeps = []
@@ -132,7 +132,7 @@ def test_extra_hint_of_60_seconds_is_slept():
     with pytest.raises(EmbeddingError, match="after 5 attempts"):
         embedder_for(quota, sleeps).embed(["a"])
     assert len(calls) == 5
-    assert sleeps == [60] * 4
+    assert sleeps == [61] * 4
 
 
 # Extra (Claude): the same two texts embedded again, by a new embedder on the same file, make zero requests.
@@ -220,8 +220,8 @@ def test_finished_batches_are_cached_before_a_later_batch_fails(tmp_path):
     assert keys == [expected_key("RETRIEVAL_DOCUMENT", t) for t in texts[:100]]
 
 
-# Cache/retry fix 4 (shared helper): a retryDelay hint over 60 seconds raises at once without
-# sleeping; a hint under 60 seconds is slept as given.
+# Cache/retry fix 4 (shared helper; follow-up 2 adds the buffer): a retryDelay hint over 60 seconds
+# raises at once without sleeping; a hint under 60 seconds is slept plus a 1-second buffer.
 def test_wait_to_retry_follows_the_hint_up_to_60_seconds():
     sleeps = []
     with pytest.raises(RetryDelayTooLong):
@@ -229,11 +229,11 @@ def test_wait_to_retry_follows_the_hint_up_to_60_seconds():
     assert sleeps == []
 
     wait_to_retry(1, quota_429("7s").text, sleeps.append)
-    assert sleeps == [7]
+    assert sleeps == [8]
 
 
 # Cache/retry fix 4 (embedder): an hour-long hint gives up after one call and no sleep; a 7-second
-# hint is retried with 7-second sleeps, 5 attempts at most.
+# hint is retried with 8-second sleeps (follow-up 2: 1-second buffer), 5 attempts at most.
 def test_embedder_retries_follow_the_shared_helper():
     calls = []
     sleeps = []
@@ -242,7 +242,7 @@ def test_embedder_retries_follow_the_shared_helper():
         calls.append(1)
         return quota_429("3600s")
 
-    with pytest.raises(RetryDelayTooLong):
+    with pytest.raises(EmbeddingError, match="3600"):
         embedder_for(daily_quota, sleeps).embed(["a"])
     assert len(calls) == 1
     assert sleeps == []
@@ -256,7 +256,19 @@ def test_embedder_retries_follow_the_shared_helper():
     with pytest.raises(EmbeddingError, match="after 5 attempts"):
         embedder_for(short_quota, sleeps).embed(["a"])
     assert len(calls) == 5
-    assert sleeps == [7] * 4
+    assert sleeps == [8] * 4
+
+
+# Cache/retry follow-up 3 (embedder): RetryDelayTooLong does not escape embed(); it comes out as
+# EmbeddingError with the helper's original message.
+def test_embedder_reraises_long_delay_as_embedding_error():
+    with pytest.raises(RetryDelayTooLong) as helper_error:
+        wait_to_retry(1, quota_429("3600s").text, lambda seconds: None)
+
+    with pytest.raises(EmbeddingError) as raised:
+        embedder_for(lambda request: quota_429("3600s")).embed(["a"])
+    assert type(raised.value) is EmbeddingError
+    assert str(raised.value) == str(helper_error.value)
 
 
 # Extra (Claude), cache/retry fix 5: a cache line whose vector is not 768 long is skipped like a
