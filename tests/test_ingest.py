@@ -1,7 +1,8 @@
 """Step 07 ingest tests: chunking, quality gate, dry-run, and re-ingest into local Supabase.
 
-Numbered tests map to Hank's expected results 1-10 (7-10: follow-up 1). Tests marked "extra" are
-edge cases added by Claude. Embeddings come from FakeEmbedder; no Gemini calls.
+Numbered tests map to Hank's expected results 1-10 (7-10: follow-up 1); "Cache/retry fix 2" maps
+to the 2026-10-22 cache fix. Tests marked "extra" are edge cases added by Claude. Embeddings come
+from FakeEmbedder or a mocked Gemini transport; no real Gemini calls.
 Tests never modify data/raw/; edits happen on a copy (the raw_copy fixture).
 """
 
@@ -11,8 +12,10 @@ import json
 import re
 from datetime import date, datetime, timezone
 
+import httpx
 import pytest
 
+from app.embedding import GeminiEmbedder
 from app.ingest import chunking
 from app.ingest.chunking import MAX_TOKENS, Chunk, Document, check_chunks, load_documents
 from app.ingest.cli import main
@@ -454,3 +457,20 @@ def test_extra_anchor_only_intro_rule(intro, dropped):
     keys = [key for key, _, _ in sections]
     assert ("test-page" not in keys) == dropped
     assert "test-page#topic" in keys
+
+
+# Cache/retry fix 2: a cache file with a half-written line, a blank line, and one valid line
+# does not stop a real ingest run (Gemini mocked).
+def test_corrupt_embedding_cache_does_not_stop_ingest(ingest_db, run_ingest, tmp_path):
+    def gemini(request):
+        count = len(json.loads(request.content)["requests"])
+        return httpx.Response(200, json={"embeddings": [{"values": [1.0] * EMBEDDING_DIMS}] * count})
+
+    cache = tmp_path / "embeddings.jsonl"
+    valid = json.dumps({"sha256": "0" * 64, "values": [1.0] * EMBEDDING_DIMS})
+    cache.write_text('{"sha256": "ab12", "values": [0.01, 0.0\n' + "\n" + valid + "\n")
+    client = httpx.Client(transport=httpx.MockTransport(gemini))
+    embedder = GeminiEmbedder("test-key-not-real", client=client, cache=cache)
+
+    assert run_ingest(RAW_DIR, embedder) == 0
+    assert table_counts(ingest_db)[0] == len(read_manifest()["entries"])

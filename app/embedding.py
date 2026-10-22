@@ -8,7 +8,9 @@ never the URL, so it can't leak through logged URLs or error messages.
 
 import hashlib
 import json
+import logging
 import math
+import os
 import random
 import re
 import time
@@ -25,8 +27,14 @@ MAX_ATTEMPTS = 5
 MAX_BACKOFF_SECONDS = 60
 RETRY_DELAY_RE = re.compile(r'"retryDelay":\s*"(\d+(?:\.\d+)?)s"')
 
+log = logging.getLogger(__name__)
+
 
 class EmbeddingError(RuntimeError):
+    pass
+
+
+class RetryDelayTooLong(RuntimeError):
     pass
 
 
@@ -43,22 +51,27 @@ class GeminiEmbedder:
         self.headers = {"x-goog-api-key": api_key}
         self.client = client or httpx.Client(timeout=60)
         self.sleep = sleep
-        # Keyed by text only, so one cache file must only ever see one task type (ingest's).
         self.cache = cache
         self.cached = load_cache(cache) if cache else {}
 
+    def key(self, text: str) -> str:
+        """Cache key: a vector is reusable only for the same model, size, task type, and text."""
+        return hashlib.sha256(f"{MODEL}\n{DIMENSIONS}\n{self.task_type}\n{text}".encode()).hexdigest()
+
     def embed(self, texts: list[str]) -> list[list[float]]:
-        """One unit vector per text, in order; texts already in the cache skip the API."""
-        misses = [t for t in texts if text_hash(t) not in self.cached]
-        fresh = []
+        """One unit vector per text, in order; texts already in the cache skip the API.
+        Each batch is cached as soon as it returns, so a later failing batch loses nothing."""
+        keys = [self.key(t) for t in texts]
+        misses = [(k, t) for k, t in zip(keys, texts) if k not in self.cached]
+        new = {}
         for start in range(0, len(misses), BATCH_SIZE):
-            fresh += self._embed_batch(misses[start : start + BATCH_SIZE])
-        new = dict(zip(map(text_hash, misses), fresh))
-        vectors = [self.cached.get(text_hash(t)) or new[text_hash(t)] for t in texts]
-        if self.cache and new:
-            append_cache(self.cache, new)
-            self.cached.update(new)
-        return vectors
+            batch = misses[start : start + BATCH_SIZE]
+            vectors = dict(zip([k for k, _ in batch], self._embed_batch([t for _, t in batch])))
+            if self.cache:
+                append_cache(self.cache, vectors)
+                self.cached.update(vectors)
+            new.update(vectors)
+        return [new[k] if k in new else self.cached[k] for k in keys]
 
     def _embed_batch(self, texts: list[str]) -> list[list[float]]:
         body = {
@@ -79,44 +92,67 @@ class GeminiEmbedder:
 
     def _post(self, body: dict) -> httpx.Response:
         for attempt in range(1, MAX_ATTEMPTS + 1):
-            delay = backoff_seconds(attempt)
             try:
                 response = self.client.post(ENDPOINT, json=body, headers=self.headers)
             except httpx.TransportError as exc:
-                problem = type(exc).__name__
+                problem, reply = type(exc).__name__, ""
             else:
                 if response.status_code == 200:
                     return response
-                problem = f"HTTP {response.status_code}: {response.text[:300]}"
+                problem, reply = f"HTTP {response.status_code}: {response.text[:300]}", response.text
                 if response.status_code not in RETRY_STATUSES:
                     raise EmbeddingError(f"Gemini embedding request failed, {problem}")
-                # 429 bodies say how long the quota needs; wait at least that long.
-                hint = RETRY_DELAY_RE.search(response.text)
-                if hint:
-                    delay = max(delay, float(hint.group(1)) + 1)
             if attempt == MAX_ATTEMPTS:
                 raise EmbeddingError(f"Gemini embedding request failed after {attempt} attempts, {problem}")
-            # A daily-quota 429 can ask for hours; give up after MAX_ATTEMPTS instead of sleeping that long.
-            self.sleep(min(delay, MAX_BACKOFF_SECONDS))
+            wait_to_retry(attempt, reply, self.sleep)
         raise AssertionError("unreachable")
 
 
-def text_hash(text: str) -> str:
-    return hashlib.sha256(text.encode()).hexdigest()
+def wait_to_retry(attempt: int, reply: str, sleep) -> None:
+    """Sleep before the next attempt: Gemini's retryDelay hint if the reply has one, else backoff.
+    A hint over 60 seconds (a daily quota) raises instead: no retry would succeed in time."""
+    hint = RETRY_DELAY_RE.search(reply)
+    if not hint:
+        sleep(backoff_seconds(attempt))
+        return
+    seconds = float(hint.group(1))
+    if seconds > MAX_BACKOFF_SECONDS:
+        raise RetryDelayTooLong(f"Gemini asked to retry in {seconds:g} s, over the {MAX_BACKOFF_SECONDS} s limit: {reply[:300]}")
+    sleep(seconds)
 
 
 def load_cache(path: Path) -> dict[str, list[float]]:
+    """Cached vectors by key. A line that is not a whole entry (e.g. cut off by an interrupted
+    run) is skipped with a warning, and its text gets embedded again."""
     if not path.exists():
         return {}
+    cached = {}
     with path.open() as lines:
-        return {entry["sha256"]: entry["values"] for entry in map(json.loads, lines)}
+        for number, line in enumerate(lines, 1):
+            try:
+                entry = json.loads(line)
+                key, values = entry["sha256"], entry["values"]
+                valid = len(values) == DIMENSIONS
+            except (ValueError, KeyError, TypeError):
+                valid = False
+            if valid:
+                cached[key] = values
+            else:
+                log.warning("embedding cache %s: skipping bad line %d", path, number)
+    return cached
 
 
 def append_cache(path: Path, vectors: dict[str, list[float]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a") as out:
-        for key, values in vectors.items():
-            out.write(json.dumps({"sha256": key, "values": values}) + "\n")
+    entries = "".join(json.dumps({"sha256": key, "values": values}) + "\n" for key, values in vectors.items())
+    with path.open("ab+") as out:
+        # Finish a line cut off by an interrupted run, so it doesn't swallow the next entry.
+        end = out.seek(0, os.SEEK_END)
+        if end:
+            out.seek(end - 1)
+            if out.read(1) != b"\n":
+                out.write(b"\n")
+        out.write(entries.encode())
 
 
 def backoff_seconds(attempt: int) -> float:

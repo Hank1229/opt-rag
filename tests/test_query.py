@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 
 from app import main as api
 from app.db import connect
+from app.embedding import RetryDelayTooLong
 from app.generation import DISCLAIMER, REFUSAL, GeminiGenerator, GenerationError, build_prompt
 from app.retrieval import Hit, query_embedder, retrieve
 from helpers import EMBEDDING_DIMS, insert_chunk, insert_document, unit_vector
@@ -295,16 +296,31 @@ def test_generator_gives_up_after_five_503s():
     assert len(calls) == 5
 
 
-# Retry: a 429 asking for an hour sleeps at most 60 seconds per retry.
-def test_generator_retry_delay_is_capped_at_60_seconds():
+# Cache/retry fix 4 (generator; replaces the 60-second cap test): an hour-long retryDelay hint
+# gives up after one call and no sleep; a 7-second hint is retried with 7-second sleeps, 5 attempts at most.
+def test_generator_retries_follow_the_shared_helper():
+    calls = []
     sleeps = []
 
     def daily_quota(request):
+        calls.append(1)
         return httpx.Response(429, json={"error": {"details": [{"retryDelay": "3600s"}]}})
 
-    with pytest.raises(GenerationError, match="429"):
+    with pytest.raises(RetryDelayTooLong):
         generator_for(daily_quota, sleeps).complete("prompt text")
-    assert sleeps == [60] * 4
+    assert len(calls) == 1
+    assert sleeps == []
+
+    calls.clear()
+
+    def short_quota(request):
+        calls.append(1)
+        return httpx.Response(429, json={"error": {"details": [{"retryDelay": "7s"}]}})
+
+    with pytest.raises(GenerationError, match="429"):
+        generator_for(short_quota, sleeps).complete("prompt text")
+    assert len(calls) == 5
+    assert sleeps == [7] * 4
 
 
 # Extra (Claude): other HTTP errors are not retried; replies without an answer (e.g. blocked prompts) raise.

@@ -1,23 +1,46 @@
 """Embedder tests against a mocked HTTP transport; no real Gemini calls.
 
-Tests marked "Extra" are edge cases added by Claude; the rest test Hank's decisions.
+Tests marked "Extra" are edge cases added by Claude. Tests marked "Cache/retry fix N" map to
+Hank's expected results for the 2026-10-22 cache and retry fix.
 """
 
+import hashlib
 import json
+import logging
 import math
 
 import httpx
 import pytest
 
-from app.embedding import DIMENSIONS, MAX_ATTEMPTS, MODEL, EmbeddingError, GeminiEmbedder
+from app.embedding import (
+    DIMENSIONS,
+    MAX_ATTEMPTS,
+    MODEL,
+    EmbeddingError,
+    GeminiEmbedder,
+    RetryDelayTooLong,
+    wait_to_retry,
+)
 
 FAKE_KEY = "test-key-not-real"
 
 
-def embedder_for(handler, sleeps=None, cache=None):
+def embedder_for(handler, sleeps=None, cache=None, task_type="RETRIEVAL_DOCUMENT"):
     client = httpx.Client(transport=httpx.MockTransport(handler))
     sleep = sleeps.append if sleeps is not None else lambda s: None
-    return GeminiEmbedder(FAKE_KEY, client=client, sleep=sleep, cache=cache)
+    return GeminiEmbedder(FAKE_KEY, task_type=task_type, client=client, sleep=sleep, cache=cache)
+
+
+def quota_429(seconds: str) -> httpx.Response:
+    return httpx.Response(429, json={"error": {"details": [{"retryDelay": seconds}]}})
+
+
+def cache_line(key: str, values: list[float]) -> str:
+    return json.dumps({"sha256": key, "values": values}) + "\n"
+
+
+def expected_key(task_type: str, text: str) -> str:
+    return hashlib.sha256(f"{MODEL}\n{DIMENSIONS}\n{task_type}\n{text}".encode()).hexdigest()
 
 
 def ok_response(request: httpx.Request) -> httpx.Response:
@@ -62,10 +85,7 @@ def test_extra_batches_of_100():
 
 # Extra (Claude): 429 and 503 are retried, honoring the 429 retryDelay hint.
 def test_extra_retries_429_and_5xx():
-    responses = iter([
-        httpx.Response(429, json={"error": {"details": [{"retryDelay": "7s"}]}}),
-        httpx.Response(503, text="unavailable"),
-    ])
+    responses = iter([quota_429("7s"), httpx.Response(503, text="unavailable")])
     sleeps = []
 
     def handler(request):
@@ -73,7 +93,7 @@ def test_extra_retries_429_and_5xx():
 
     assert len(embedder_for(handler, sleeps).embed(["a"])) == 1
     assert len(sleeps) == 2
-    assert sleeps[0] >= 8  # retryDelay 7s plus a second of margin
+    assert sleeps[0] == 7
 
 
 # Extra (Claude): a 400 is not retried; persistent 500s give up after MAX_ATTEMPTS.
@@ -99,23 +119,24 @@ def test_extra_gives_up():
     assert len(calls) == MAX_ATTEMPTS
 
 
-# A 429 asking for an hour sleeps at most 60 seconds per retry and gives up after 5 attempts.
-def test_retry_delay_is_capped_at_60_seconds():
+# Extra (Claude), was the 60-second cap test: a hint of exactly 60 seconds is still slept,
+# and the retries stop after 5 attempts.
+def test_extra_hint_of_60_seconds_is_slept():
     calls = []
     sleeps = []
 
-    def daily_quota(request):
+    def quota(request):
         calls.append(1)
-        return httpx.Response(429, json={"error": {"details": [{"retryDelay": "3600s"}]}})
+        return quota_429("60s")
 
     with pytest.raises(EmbeddingError, match="after 5 attempts"):
-        embedder_for(daily_quota, sleeps).embed(["a"])
+        embedder_for(quota, sleeps).embed(["a"])
     assert len(calls) == 5
     assert sleeps == [60] * 4
 
 
-# Cache: the same two texts embedded again, by a new embedder on the same file, make zero requests.
-def test_cache_skips_api_for_seen_texts(tmp_path):
+# Extra (Claude): the same two texts embedded again, by a new embedder on the same file, make zero requests.
+def test_extra_cache_skips_api_for_seen_texts(tmp_path):
     calls = []
 
     def handler(request):
@@ -133,6 +154,139 @@ def test_cache_skips_api_for_seen_texts(tmp_path):
     assert len(calls) == 1
     assert second == first
     assert first[0] != first[1]
+
+
+# Cache/retry fix 1: the cache key is sha256 of model + dims + task_type + text, so the same text
+# embedded as RETRIEVAL_DOCUMENT and as RETRIEVAL_QUERY makes two cache entries and two API calls.
+def test_cache_key_includes_model_dims_and_task_type(tmp_path):
+    calls = []
+
+    def handler(request):
+        calls.append(1)
+        return ok_response(request)
+
+    cache = tmp_path / "embeddings.jsonl"
+    embedder_for(handler, cache=cache, task_type="RETRIEVAL_DOCUMENT").embed(["same text"])
+    embedder_for(handler, cache=cache, task_type="RETRIEVAL_QUERY").embed(["same text"])
+
+    assert len(calls) == 2
+    keys = [json.loads(line)["sha256"] for line in cache.read_text().splitlines()]
+    assert keys == [expected_key("RETRIEVAL_DOCUMENT", "same text"), expected_key("RETRIEVAL_QUERY", "same text")]
+
+
+# Cache/retry fix 2: a half-written line and a blank line are skipped with a warning each; the
+# one valid entry is loaded and served without an API call.
+def test_bad_cache_lines_are_skipped(tmp_path, caplog):
+    vector = [0.6, 0.8] + [0.0] * (DIMENSIONS - 2)
+    cache = tmp_path / "embeddings.jsonl"
+    cache.write_text(
+        '{"sha256": "ab12", "values": [0.01, 0.0\n'
+        + "\n"
+        + cache_line(expected_key("RETRIEVAL_DOCUMENT", "a"), vector)
+    )
+    calls = []
+
+    def handler(request):
+        calls.append(1)
+        return ok_response(request)
+
+    with caplog.at_level(logging.WARNING, logger="app.embedding"):
+        embedder = embedder_for(handler, cache=cache)
+
+    assert len(embedder.cached) == 1
+    assert len([r for r in caplog.records if r.levelno == logging.WARNING]) == 2
+    assert embedder.embed(["a"]) == [vector]
+    assert calls == []
+
+
+# Cache/retry fix 3: three batches where the second fails after its retries: the first batch's
+# vectors are already in the cache file when the error comes out of embed().
+def test_finished_batches_are_cached_before_a_later_batch_fails(tmp_path):
+    batches = []
+
+    def handler(request):
+        batches.append(1)
+        if len(batches) == 1:
+            return ok_response(request)
+        return httpx.Response(500, text="boom")
+
+    cache = tmp_path / "embeddings.jsonl"
+    texts = [f"text {i}" for i in range(201)]  # batches of 100, 100, 1
+    with pytest.raises(EmbeddingError, match="after 5 attempts"):
+        embedder_for(handler, cache=cache).embed(texts)
+
+    assert len(batches) == 1 + 5  # the third batch is never sent
+    keys = [json.loads(line)["sha256"] for line in cache.read_text().splitlines()]
+    assert keys == [expected_key("RETRIEVAL_DOCUMENT", t) for t in texts[:100]]
+
+
+# Cache/retry fix 4 (shared helper): a retryDelay hint over 60 seconds raises at once without
+# sleeping; a hint under 60 seconds is slept as given.
+def test_wait_to_retry_follows_the_hint_up_to_60_seconds():
+    sleeps = []
+    with pytest.raises(RetryDelayTooLong):
+        wait_to_retry(1, quota_429("3600s").text, sleeps.append)
+    assert sleeps == []
+
+    wait_to_retry(1, quota_429("7s").text, sleeps.append)
+    assert sleeps == [7]
+
+
+# Cache/retry fix 4 (embedder): an hour-long hint gives up after one call and no sleep; a 7-second
+# hint is retried with 7-second sleeps, 5 attempts at most.
+def test_embedder_retries_follow_the_shared_helper():
+    calls = []
+    sleeps = []
+
+    def daily_quota(request):
+        calls.append(1)
+        return quota_429("3600s")
+
+    with pytest.raises(RetryDelayTooLong):
+        embedder_for(daily_quota, sleeps).embed(["a"])
+    assert len(calls) == 1
+    assert sleeps == []
+
+    calls.clear()
+
+    def short_quota(request):
+        calls.append(1)
+        return quota_429("7s")
+
+    with pytest.raises(EmbeddingError, match="after 5 attempts"):
+        embedder_for(short_quota, sleeps).embed(["a"])
+    assert len(calls) == 5
+    assert sleeps == [7] * 4
+
+
+# Extra (Claude), cache/retry fix 5: a cache line whose vector is not 768 long is skipped like a
+# corrupted line, so the text is embedded again.
+def test_extra_cache_line_with_wrong_dims_is_skipped(tmp_path, caplog):
+    cache = tmp_path / "embeddings.jsonl"
+    cache.write_text(cache_line(expected_key("RETRIEVAL_DOCUMENT", "a"), [1.0] * (DIMENSIONS - 1)))
+    calls = []
+
+    def handler(request):
+        calls.append(1)
+        return ok_response(request)
+
+    with caplog.at_level(logging.WARNING, logger="app.embedding"):
+        embedder = embedder_for(handler, cache=cache)
+
+    assert embedder.cached == {}
+    assert len(caplog.records) == 1
+    assert len(embedder.embed(["a"])[0]) == DIMENSIONS
+    assert len(calls) == 1
+
+
+# Extra (Claude): a cache file cut off mid-line (no trailing newline) does not swallow the next
+# entry appended to it.
+def test_extra_append_after_cut_off_line(tmp_path):
+    cache = tmp_path / "embeddings.jsonl"
+    cache.write_text('{"sha256": "ab12", "values": [0.01')
+    embedder_for(ok_response, cache=cache).embed(["a"])
+
+    assert list(embedder_for(ok_response, cache=cache).cached) == [expected_key("RETRIEVAL_DOCUMENT", "a")]
 
 
 # Extra (Claude): a response with the wrong number of vectors or dims is an error.
