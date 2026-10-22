@@ -25,6 +25,7 @@ ENDPOINT = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:bat
 RETRY_STATUSES = {429, 500, 502, 503, 504}
 MAX_ATTEMPTS = 5
 MAX_BACKOFF_SECONDS = 60
+MAX_TOTAL_SLEEP_SECONDS = 120  # per request, across all retries
 RETRY_DELAY_RE = re.compile(r'"retryDelay":\s*"(\d+(?:\.\d+)?)s"')
 
 log = logging.getLogger(__name__)
@@ -91,6 +92,7 @@ class GeminiEmbedder:
         return [normalize(e["values"]) for e in embeddings]
 
     def _post(self, body: dict) -> httpx.Response:
+        slept = 0.0
         for attempt in range(1, MAX_ATTEMPTS + 1):
             try:
                 response = self.client.post(ENDPOINT, json=body, headers=self.headers)
@@ -105,23 +107,26 @@ class GeminiEmbedder:
             if attempt == MAX_ATTEMPTS:
                 raise EmbeddingError(f"Gemini embedding request failed after {attempt} attempts, {problem}")
             try:
-                wait_to_retry(attempt, reply, self.sleep)
+                slept = wait_to_retry(attempt, reply, self.sleep, slept)
             except RetryDelayTooLong as exc:
                 raise EmbeddingError(str(exc)) from exc
         raise AssertionError("unreachable")
 
 
-def wait_to_retry(attempt: int, reply: str, sleep) -> None:
-    """Sleep before the next attempt: Gemini's retryDelay hint plus a second if the reply has one,
-    else backoff. A hint over 60 seconds (a daily quota) raises instead: no retry would succeed in time."""
+def wait_to_retry(attempt: int, reply: str, sleep, slept: float) -> float:
+    """Sleep before the next attempt and return the request's new total slept: Gemini's retryDelay
+    hint plus 1 s if the reply has one, else backoff. Raises instead of sleeping when the wait would
+    exceed 61 s (a daily quota) or push the total past 120 s: no retry would succeed in time."""
     hint = RETRY_DELAY_RE.search(reply)
-    if not hint:
-        sleep(backoff_seconds(attempt))
-        return
-    seconds = float(hint.group(1))
-    if seconds > MAX_BACKOFF_SECONDS:
-        raise RetryDelayTooLong(f"Gemini asked to retry in {seconds:g} s, over the {MAX_BACKOFF_SECONDS} s limit: {reply[:300]}")
-    sleep(seconds + 1)
+    delay = float(hint.group(1)) + 1 if hint else backoff_seconds(attempt)
+    if hint and delay > MAX_BACKOFF_SECONDS + 1:
+        raise RetryDelayTooLong(f"Gemini asked to retry in {delay - 1:g} s, a wait over the {MAX_BACKOFF_SECONDS + 1} s limit: {reply[:300]}")
+    if slept + delay > MAX_TOTAL_SLEEP_SECONDS:
+        raise RetryDelayTooLong(
+            f"retrying in {delay:g} s would bring the wait to {slept + delay:g} s, past the {MAX_TOTAL_SLEEP_SECONDS} s total: {reply[:300]}"
+        )
+    sleep(delay)
+    return slept + delay
 
 
 def load_cache(path: Path) -> dict[str, list[float]]:

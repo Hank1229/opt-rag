@@ -65,12 +65,13 @@ class GeminiGenerator:
             "contents": [{"role": "user", "parts": [{"text": prompt}]}],
             "generationConfig": {"temperature": self.temperature},
         }
+        slept = 0.0
         for attempt in range(1, MAX_ATTEMPTS + 1):
             response = self.client.post(ENDPOINT.format(model=self.model), json=body, headers=self.headers)
             if response.status_code not in RETRY_STATUSES or attempt == MAX_ATTEMPTS:
                 break
             try:
-                wait_to_retry(attempt, response.text, self.sleep)
+                slept = wait_to_retry(attempt, response.text, self.sleep, slept)
             except RetryDelayTooLong as exc:
                 raise GenerationError(str(exc)) from exc
         if response.status_code != 200:

@@ -324,12 +324,28 @@ def test_generator_retries_follow_the_shared_helper():
     assert sleeps == [8] * 4
 
 
+# Extra (Claude): the generator carries the total across its attempts: three 50-second hints give
+# two sleeps and a GenerationError on the third 429.
+def test_extra_generator_stops_at_total_sleep_cap():
+    calls = []
+    sleeps = []
+
+    def quota(request):
+        calls.append(1)
+        return httpx.Response(429, json={"error": {"details": [{"retryDelay": "50s"}]}})
+
+    with pytest.raises(GenerationError, match="120 s"):
+        generator_for(quota, sleeps).complete("prompt text")
+    assert len(calls) == 3
+    assert sleeps == [51, 51]
+
+
 # Cache/retry follow-up 3 (generator): RetryDelayTooLong does not escape complete(); it comes out as
 # GenerationError with the helper's original message.
 def test_generator_reraises_long_delay_as_generation_error():
     reply = json.dumps({"error": {"details": [{"retryDelay": "3600s"}]}})
     with pytest.raises(RetryDelayTooLong) as helper_error:
-        wait_to_retry(1, reply, lambda seconds: None)
+        wait_to_retry(1, reply, lambda seconds: None, 0)
 
     with pytest.raises(GenerationError) as raised:
         generator_for(lambda request: httpx.Response(429, text=reply)).complete("prompt text")
