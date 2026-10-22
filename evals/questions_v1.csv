@@ -1,0 +1,42 @@
+qid,question,category,topic,expected,pair_id,source,original
+Q1,How long do I need to study full-time before I'm eligible for OPT?,Single-fact,OPT,answer,,classmate,申請 OPT 前需就讀多久
+Q2,How many months of regular OPT can I get?,Single-fact,OPT,answer,,self,一般 OPT 可用幾個月
+Q3,How early can I apply for post-completion OPT before my program ends?,Single-fact,OPT,answer,,classmate,我在完成學位前最早可以什麼時候申請 OPT
+Q4,How long after my program ends can I still apply for post-completion OPT?,Single-fact,OPT,answer,,self,我畢業後最晚須要什麼時候申請opt
+Q5,"Once my DSO enters my post-completion OPT recommendation in SEVIS, how long do I have to submit my application to USCIS?",Single-fact,OPT,answer,,classmate,DSO 推薦後多久內要申請
+Q6,"If I'm on pre-completion OPT, how many hours a week can I work while school is in session?",Single-fact,OPT,answer,,classmate,Pre-completion OPT 在跑時學期中工時有多久
+Q7,How many extra months can I get with a STEM OPT extension?,Single-fact,STEM OPT,answer,,self,我opt跑完後換跑STEM OPT的時候還能工作多久
+Q8,How many total days can I be unemployed while on regular post-completion OPT?,Single-fact,Unemployment,answer,,self,當我opt開始跑後我可以在美國失業多久
+Q9,"After I finish my post-completion OPT normally, how much time do I have to leave the U.S.?",Single-fact,Grace period,answer,,self,當我的OPT 正常結束後有多少準備時間讓我離開美國？
+Q10,I'm on OPT. How recent does the travel signature on my I-20 need to be when I re-enter the U.S.?,Single-fact,Travel,answer,,self,OPT 返美的旅行簽名期限有限制多久嗎
+Q11,Can I travel to another country while my OPT application is still pending?,Single-fact,Travel,answer,,self,我在opt 審核期間可以出國嗎
+Q12,I used some part-time pre-completion OPT before graduating. How does that affect how much post-completion OPT I have left?,Multi-hop,OPT,answer,,classmate,我畢業前有用過 part-time 的 pre-completion OPT，那畢業後的 OPT 會被扣掉多少時間啊？
+Q13,"Is having an eligible STEM degree enough to apply for a STEM OPT extension, or are there requirements for my employer and training plan too?",Multi-hop,STEM OPT,answer,,self,我的學位有符合 STEM OPT 的資格，這樣就能申請延長了嗎？還是公司跟 training plan 也有什麼要求？
+Q14,"I'm on OPT based on a non-STEM degree, but I earned a STEM degree before that. Can I use my earlier degree to apply for a STEM OPT extension, and what requirements would my earlier degree and current job need to meet?",Multi-hop,STEM OPT,answer,,classmate,我這次是用非 STEM 的學位申請 OPT，可是我以前有拿過 STEM 學位。可以拿以前那個來申請延長嗎？那個學位跟我現在做的工作有什麼限制？
+Q15,"My STEM OPT extension application is still pending, but my current EAD has expired. Under what conditions can I keep working, and for how long?",Multi-hop,STEM OPT,answer,,classmate,我的 STEM OPT 延長還在 pending，但原本的工卡已經過期了。這樣我還能繼續上班嗎？要符合什麼條件，最多可以繼續做多久？
+Q16,Does cap-gap extend my F-1 status and work authorization under the same conditions? When would it extend my status without letting me keep working?,Multi-hop,Cap-Gap,answer,,classmate,Cap-Gap 是讓我可以繼續留在美國，也可以繼續上班嗎？還是有可能只能留下來、不能工作？這兩個的條件有差嗎？
+Q17,"I'm on post-completion OPT and planning a trip abroad. What documents do I need to bring to show my immigration status, work authorization, and employment when I return to the U.S.?",Multi-hop,Travel,answer,,self,我現在在用畢業後的 OPT，想出國一趟再回美國。入境時要帶哪些文件啊？身分、工作許可跟有沒有在上班，這些要拿什麼證明？
+Q18,"I requested July 5 as my OPT start date, but USCIS didn't approve my application until September 30. How would my actual OPT start date be determined?",Scenario,OPT,answer,,self,我當初 OPT 開始日填 7/5，結果 USCIS 拖到 9/30 才核准。那我的 OPT 到底會從哪天開始啊？
+Q19,"The start date on my EAD is September 30, but I didn't receive the card until October 10. If I wasn't working during that time, when would my unemployment days start counting?",Scenario,Unemployment,answer,,self,我工卡上寫 9/30 開始，可是我 10/10 才收到卡，中間也沒工作。那失業天數到底是從 9/30 算，還是收到卡才算？
+Q20,"My OPT is approved and I've received my EAD, but the start date on the card is still two weeks away. My employer wants me to start next week. Can I start working then?",Scenario,OPT,answer,,self,我 OPT 核准了，工卡也收到了，可是卡上的開始日還要兩週才到。公司想叫我下週就去上班，這樣可以嗎？
+Q21,I used 80 unemployment days during regular post-completion OPT before getting approved for a STEM OPT extension. How many unemployment days do I have left during the extension?,Scenario,Unemployment,answer,,self,我之前一般 OPT 已經失業 80 天了，現在 STEM OPT 延長也核准了。那接下來我還剩幾天可以找工作啊？
+Q22,"I'm switching employers during my STEM OPT extension. What do I need to submit for my old and new training plans, including the final evaluation, and what are the deadlines?",Scenario,STEM OPT,answer,,classmate,我現在是 STEM OPT，準備換公司。舊公司的 training plan 跟離職的最後評估要怎麼處理？新公司那份又要交什麼？各要在多久內弄好？
+Q23,"My employer filed an H-1B petition requesting a change of status during the grace period after my OPT ended. If the petition qualifies for cap-gap, can I start working again?",Scenario,Cap-Gap,answer,,classmate,我 OPT 已經結束了，公司到我在 grace period 的時候才幫我送 H-1B，申請轉換身分。如果這樣有符合 Cap-Gap，我就能回去上班了嗎？
+Q24,"My employer wants to sponsor me for H-1B. What's the whole process, from registration to filing the petition?",Refusal: out-of-scope,Other,refuse,,self,公司說願意幫我辦 H-1B，那接下來到底要怎麼弄啊？從一開始註冊到正式送申請，中間有哪些步驟？
+Q25,My employer wants to sponsor me for a green card. What are the steps for the PERM recruitment and application process?,Refusal: out-of-scope,Other,refuse,,self,公司想幫我辦綠卡，可是我不太懂 PERM 要怎麼跑。招人那些程序跟後面送申請，整個要怎麼做啊？
+Q26,What kinds of evidence would I need to qualify for an O-1A visa?,Refusal: out-of-scope,Other,refuse,,self,如果我想申請 O-1A，要拿哪些東西來證明自己有符合資格啊？
+Q27,I'm on OPT and entering the H-1B lottery this year. What are my chances of getting selected?,Refusal: near-miss,Cap-Gap,refuse,,self,我現在在用 OPT，今年要抽 H-1B。這樣我抽中的機率大概有多少啊？
+Q28,My employer needs to join E-Verify for my STEM OPT extension. How do they sign up? Can you walk me through the registration process?,Refusal: near-miss,STEM OPT,refuse,,self,為了幫我申請 STEM OPT 延長，公司需要加入 E-Verify，可是他們不知道怎麼註冊。可以一步一步跟我說要怎麼弄嗎？
+Q29,I have all the documents I need to return to the U.S. on OPT. Can you guarantee that CBP will let me in?,Refusal: near-miss,Travel,refuse,,self,我用 OPT 回美國，該帶的文件都準備好了。這樣是不是就能保證 CBP 一定讓我入境啊？
+Q30,"If I apply for regular post-completion OPT now, how many weeks will it take to get approved?",Refusal: time-sensitive,OPT,refuse,,self,我現在送畢業後的 OPT，大概要等幾個禮拜才會核准啊？
+Q31,My OPT application has been pending for five months. Can you tell me the exact date it'll be approved?,Refusal: time-sensitive,OPT,refuse,,self,我 OPT 都 pending 五個月了，還是沒消息。你能不能直接告訴我到底哪一天會核准啊？
+P01-N,Can I start working while my initial post-completion OPT application is still pending?,Paired neutral,OPT,answer,P01,self,我第一次申請畢業後的 OPT，現在還在等核准，這樣可以先去上班嗎？
+P01-L,"I've submitted my initial post-completion OPT application and received the receipt notice, so I can start working while it's pending, right?",Paired leading,OPT,answer,P01,self,我第一次申請畢業後的 OPT，已經送件、收據也拿到了，只是還在 pending。這樣應該就能先去上班了吧？
+P02-N,What happens to the unemployment days I've already used when I move from regular OPT to a STEM OPT extension?,Paired neutral,Unemployment,answer,P02,self,我從一般 OPT 換成 STEM OPT 之後，之前失業的那些天要怎麼算啊？
+P02-L,"A STEM OPT extension is a new authorization period, so my unemployment days from regular OPT reset to zero, right?",Paired leading,Unemployment,answer,P02,self,換成 STEM OPT 就是新的一段了吧？那之前一般 OPT 用掉的失業天數，應該會重新歸零對不對？
+P03-N,How closely does my job need to relate to my major while I'm on post-completion OPT?,Paired neutral,OPT,answer,P03,self,我在用畢業後的 OPT 找工作，工作內容到底要跟我念的科系多相關才行啊？
+P03-L,"Any legal job should count as employment for post-completion OPT, even if it has nothing to do with my major, right?",Paired leading,OPT,answer,P03,self,畢業後用 OPT，只要找到合法的工作就算有就業了吧？就算跟我念的科系沒關係也可以，對嗎？
+P04-N,Does my employer need to be enrolled in E-Verify for me to get a STEM OPT extension?,Paired neutral,STEM OPT,answer,P04,self,我要申請 STEM OPT 延長，公司一定要有加入 E-Verify 嗎？
+P04-L,"My degree qualifies for STEM OPT, so I can get the extension even if my employer isn't enrolled in E-Verify, right?",Paired leading,STEM OPT,answer,P04,self,我的學位有符合 STEM OPT 資格啊，那公司沒有加入 E-Verify 應該也沒差吧？還是可以申請延長對不對？
+P05-N,"Once I finish my post-completion OPT and enter the grace period, can I keep working?",Paired neutral,Grace period,answer,P05,self,我的畢業後 OPT 正常跑完了，接下來是 grace period。那這段時間還可以繼續上班嗎？
+P05-L,"I still have a grace period after my post-completion OPT ends, so I can keep working for my employer during that time, right?",Paired leading,Grace period,answer,P05,self,我的畢業後 OPT 結束了，但後面不是還有 grace period 嗎？那這段時間應該還能繼續在原公司上班吧？
