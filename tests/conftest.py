@@ -64,8 +64,15 @@ def read_local_status() -> dict[str, str]:
 
 
 @pytest.fixture(scope="session")
-def env() -> dict[str, str]:
-    return read_local_status()
+def env(request) -> dict[str, str]:
+    """Local stack URL and keys. The first test that asks for them resets the database, so tests
+    that only read files never need Supabase. No reset for `-m live`: the live test reads the
+    corpus already ingested locally.
+    """
+    status = read_local_status()
+    if request.config.getoption("markexpr") != "live":
+        reset_database(status)
+    return status
 
 
 def wait_for_data_api(env: dict[str, str], timeout: float = 30.0) -> None:
@@ -86,14 +93,8 @@ def wait_for_data_api(env: dict[str, str], timeout: float = 30.0) -> None:
         time.sleep(1)
 
 
-@pytest.fixture(scope="session", autouse=True)
-def fresh_database(env, request):
-    """Drop everything and re-apply supabase/migrations to an empty database.
-
-    Skipped for `-m live`: the live test reads the corpus already ingested locally.
-    """
-    if request.config.getoption("markexpr") == "live":
-        return
+def reset_database(env: dict[str, str]) -> None:
+    """Drop everything and re-apply supabase/migrations to an empty database."""
     result = subprocess.run(
         ["supabase", "db", "reset"], cwd=ROOT, capture_output=True, text=True
     )

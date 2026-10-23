@@ -26,4 +26,4 @@ dev = [
 
 [tool.pytest.ini_options]
 addopts = "-m 'not live'"
-markers = ["live: calls the real Gemini API; run with `uv run pytest -m live`"]
+markers = ["live: calls a real external API (Gemini or eCFR); run with `uv run pytest -m live`"]

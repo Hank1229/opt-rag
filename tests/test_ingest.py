@@ -24,7 +24,7 @@ from helpers import EMBEDDING_DIMS, FakeEmbedder
 
 FAQ_PAGE = "sits-stem-opt-frequently-asked-questions"
 PRACTICAL_PAGE = "sits-applying-for-practical-training"
-ECFR_PAGE_URL = "https://www.ecfr.gov/on/2026-10-01/title-8/section-214.2"
+ECFR_PAGE_URL = "https://www.ecfr.gov/on/2026-09-14/title-8/section-214.2"
 STATUS_PAGE = "sits-maintaining-status"
 REMOVED_HEADING = "Annual Vacation for F-1 Students"
 
@@ -284,24 +284,25 @@ def test_extra_manifest_ids():
     assert all(i.startswith(("ecfr-", "sits-")) for i in ids)
 
 
-# Extra (Claude): deeper eCFR levels use the italic markers, e.g. (C)(7)(i); all 20
-# numbered paragraphs of (f) are present; heading-only and [Reserved] paragraphs
+# Extra (Claude): deeper eCFR levels use the italic markers, e.g. (C)(7)(i); all 19
+# numbered paragraphs of (f) at 2026-09-14 are present; heading-only and [Reserved] paragraphs
 # are not chunks.
 def test_extra_ecfr_keys_follow_paragraph_hierarchy():
     chunks = document(RAW_DIR, "ecfr-214.2f").chunks
     keys = {c.citation_key for c in chunks}
     for key in (
         "214.2(f)(1)(i)",
-        "214.2(f)(5)(vii)(A)(1)",
+        "214.2(f)(5)(vi)(A)(1)",
         "214.2(f)(10)(ii)(C)(7)(i)",
         "214.2(f)(10)(ii)(E)",
         "214.2(f)(15)(ii)(A)(1)",
-        "214.2(f)(20)",
+        "214.2(f)(19)",
     ):
         assert key in keys
-    for n in range(1, 21):
+    for n in range(1, 20):
         assert any(k == f"214.2(f)({n})" or k.startswith(f"214.2(f)({n})(") for k in keys), n
     assert "214.2(f)" not in keys
+    assert not any(k.startswith("214.2(f)(20)") for k in keys)
     assert not any(c.content.endswith("[Reserved]") for c in chunks)
 
 
@@ -421,7 +422,8 @@ def test_09_faq_page_is_only_question_chunks():
     assert not any("topic of your choice" in c.content for c in chunks)
 
 
-# 10. The eCFR documents row points at the point-in-time page for 2026-10-01.
+# 10. The eCFR documents row points at the point-in-time page for 2026-09-14.
+# (Written as 2026-10-01; the date follows the step 09b re-pin.)
 def test_10_ecfr_url_is_point_in_time_page(ingest_db, run_ingest):
     assert run_ingest() == 0
     url = ingest_db.execute("select url from documents where source_id = 'ecfr-214.2f'").fetchone()[0]

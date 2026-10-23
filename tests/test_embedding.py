@@ -1,7 +1,8 @@
 """Embedder tests against a mocked HTTP transport; no real Gemini calls.
 
 Tests marked "Extra" are edge cases added by Claude. Tests marked "Cache/retry fix N" map to
-Hank's expected results for the 2026-10-22 cache and retry fix.
+Hank's expected results for the 2026-10-22 cache and retry fix; "Step 09b re-pin 3" maps to
+step 09b part 2 expected result 3.
 """
 
 import hashlib
@@ -21,6 +22,7 @@ from app.embedding import (
     RetryDelayTooLong,
     wait_to_retry,
 )
+from app.ingest.chunking import Chunk
 
 FAKE_KEY = "test-key-not-real"
 
@@ -154,6 +156,32 @@ def test_extra_cache_skips_api_for_seen_texts(tmp_path):
     assert len(calls) == 1
     assert second == first
     assert first[0] != first[1]
+
+
+# Step 09b re-pin 3. Re-ingest -> only chunks whose text or header changed are re-embedded; the
+# rest come from the cache.
+def test_09b_3_reingest_embeds_only_chunks_whose_text_or_header_changed(tmp_path):
+    sent = []
+
+    def handler(request):
+        sent.append([r["content"]["parts"][0]["text"] for r in json.loads(request.content)["requests"]])
+        return ok_response(request)
+
+    cache = tmp_path / "embeddings.jsonl"
+    before = [
+        Chunk("214.2(f)(1)", 0, "8 CFR 214.2(f) > (1)", "same text"),
+        Chunk("214.2(f)(2)", 0, "8 CFR 214.2(f) > (2)", "old text"),
+        Chunk("214.2(f)(3)", 0, "8 CFR 214.2(f) > (3) Old heading", "same text"),
+    ]
+    after = [
+        before[0],
+        Chunk("214.2(f)(2)", 0, "8 CFR 214.2(f) > (2)", "new text"),
+        Chunk("214.2(f)(3)", 0, "8 CFR 214.2(f) > (3) New heading", "same text"),
+    ]
+    embedder_for(handler, cache=cache).embed([c.embed_text for c in before])
+    embedder_for(handler, cache=cache).embed([c.embed_text for c in after])
+
+    assert sent[1] == [after[1].embed_text, after[2].embed_text]
 
 
 # Cache/retry fix 1: the cache key is sha256 of model + dims + task_type + text, so the same text

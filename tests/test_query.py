@@ -25,7 +25,7 @@ QUESTION = "How many days of unemployment are allowed on post-completion OPT?"
 ECFR_URL = "https://www.ecfr.gov/on/2026-10-01/title-8/section-214.2"
 SITS_URL = "https://studyinthestates.dhs.gov/stem-opt-hub/additional-resources/form-i-983-overview"
 SOURCE_FIELDS = {"label", "citation_key", "title", "source_tier", "url", "distance"}
-CORPUS_CHUNKS = 266  # chunk count of a full local ingest of data/raw/
+CORPUS_CHUNKS = 228  # chunk count of a full local ingest of data/raw/
 
 
 class FixedEmbedder:

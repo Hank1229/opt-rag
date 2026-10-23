@@ -98,6 +98,7 @@ Ragas + React + Vite + TypeScript frontend. Deploy: Fly.io/Railway + Vercel.
 
 - Skeleton done: uv, FastAPI /health, .env.example, first commit made.
 - Fetch scripts and raw corpus snapshot done (eCFR 8 CFR 214.2 at
-  issue date 2026-10-01, 13 Study in the States pages).
+  issue date 2026-09-14, the last day before the Duration of Status
+  amendment took effect; 13 Study in the States pages).
 - Steps 06-08 done: Supabase schema, ingest, retrieval + /query.
 - Next: step 09 (eval dataset).

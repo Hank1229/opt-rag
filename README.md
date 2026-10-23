@@ -6,4 +6,4 @@ The goal is to show that I can design a RAG pipeline that can be evaluated, and 
 
 Stack: Python 3.12, FastAPI, uv, Gemini API, Supabase (pgvector).
 
-Current state: fetch scripts and a raw corpus snapshot are done (eCFR 8 CFR 214.2 at issue date 2026-10-01, 13 Study in the States pages); the API only has `GET /health`.
+Current state: fetch scripts and a raw corpus snapshot are done (eCFR 8 CFR 214.2 at issue date 2026-09-14, 13 Study in the States pages); the API only has `GET /health`.

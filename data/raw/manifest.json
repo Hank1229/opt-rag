@@ -1,15 +1,15 @@
 {
-  "ecfr_issue_date": "2026-10-01",
+  "ecfr_issue_date": "2026-09-14",
   "entries": [
     {
       "source_id": "ecfr-214.2f",
       "tier": 1,
-      "url": "https://www.ecfr.gov/api/versioner/v1/full/2026-10-01/title-8.xml?chapter=I&subchapter=B&part=214&section=214.2",
-      "final_url": "https://www.ecfr.gov/api/versioner/v1/full/2026-10-01/title-8.xml?chapter=I&subchapter=B&part=214&section=214.2",
+      "url": "https://www.ecfr.gov/api/versioner/v1/full/2026-09-14/title-8.xml?chapter=I&subchapter=B&part=214&section=214.2",
+      "final_url": "https://www.ecfr.gov/api/versioner/v1/full/2026-09-14/title-8.xml?chapter=I&subchapter=B&part=214&section=214.2",
       "path": "ecfr/8-cfr-214.2.xml",
-      "fetched_at": "2026-10-07T05:54:14Z",
-      "bytes": 747126,
-      "raw_sha256": "673bc9721fd2fd0553ca1ca8185d67c3893e31005ee026c2fa521158ad3097b8"
+      "fetched_at": "2026-10-23T01:55:21Z",
+      "bytes": 729587,
+      "raw_sha256": "920ad4ad54d7255bd313257ea29d1d16f235fae22ef4e5e5ff3c3a89aa3cb690"
     },
     {
       "source_id": "sits-applying-for-practical-training",
