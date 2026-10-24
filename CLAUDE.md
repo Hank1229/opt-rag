@@ -101,4 +101,6 @@ Ragas + React + Vite + TypeScript frontend. Deploy: Fly.io/Railway + Vercel.
   issue date 2026-09-14, the last day before the Duration of Status
   amendment took effect; 13 Study in the States pages).
 - Steps 06-08 done: Supabase schema, ingest, retrieval + /query.
-- Next: step 09 (eval dataset).
+- Gold set v1 frozen in evals/gold_v1.jsonl (41 items: 31 answer,
+  10 refuse; corpus eCFR 2026-09-14). Any change to it voids the baseline.
+- Next: step 10, Ragas baseline comparing opt-rag and bare Gemini.
