@@ -48,7 +48,7 @@ def build_prompt(question: str, chunks: list[Hit]) -> str:
 
 
 def generate(question: str, chunks: list[Hit], *, generator) -> str:
-    """Answer from the given chunks; an empty list is the bare-Gemini eval arm."""
+    """Answer from the given chunks."""
     return generator.complete(build_prompt(question, chunks))
 
 

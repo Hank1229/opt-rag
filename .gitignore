@@ -15,3 +15,7 @@ reports/
 
 # Embedding cache for ingest (app/embedding.py), rebuilt from the API
 data/cache/
+
+# Eval smoke runs and per-run query embedding caches (app/evals/cli.py)
+evals/results/smoke/
+evals/results/**/query_embeddings.jsonl
