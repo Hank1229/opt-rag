@@ -66,12 +66,12 @@ def test_extra_counts_match_the_decision():
     assert len(rows) == 41
     assert Counter(r["category"] for r in rows) == {
         "Single-fact": 11,
-        "Multi-hop": 6,
+        "Multi-hop": 5,
         "Scenario": 5,
         "Paired neutral": 5,
         "Paired leading": 5,
         "Refusal: out-of-scope": 3,
-        "Refusal: near-miss": 4,
+        "Refusal: near-miss": 5,
         "Refusal: time-sensitive": 2,
     }
 

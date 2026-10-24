@@ -1,4 +1,4 @@
-"""Gold set v1: load the hand-written questions and drafts, and check both before review.
+"""Gold set v1: load the hand-written questions, drafts and frozen set, and check them.
 
 Checks are deterministic (DECISIONS.md, 2026-10-22 "Gold set v1"): qids and pairs in
 evals/questions_v1.csv, and for drafts, citation keys that exist in the local chunker output
@@ -17,6 +17,8 @@ from app.ingest.chunking import load_documents
 ROOT = Path(__file__).resolve().parent.parent
 QUESTIONS = ROOT / "evals" / "questions_v1.csv"
 DRAFTS = ROOT / "evals" / "drafts" / "gold_v1_draft.jsonl"
+GOLD = ROOT / "evals" / "gold_v1.jsonl"
+EVALS_README = ROOT / "evals" / "README.md"
 RAW_DIR = ROOT / "data" / "raw"
 QUESTION_FIELDS = ("qid", "question", "category", "topic", "expected", "pair_id", "source", "original")
 NOT_IN_CORPUS = "NOT_IN_CORPUS"

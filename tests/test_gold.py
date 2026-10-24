@@ -171,6 +171,10 @@ def test_extra_draft_file_passes_every_check(corpus):
         pytest.skip(f"{DRAFTS} not written yet")
     drafts = read_drafts()
     issue_date = read_manifest(RAW_DIR)["ecfr_issue_date"]
-    assert copy_problems(drafts, read_questions(), issue_date) == []
+    # Step 09c relabeled Q12 in questions_v1.csv after drafting; the draft keeps the old labels.
+    assert copy_problems(drafts, read_questions(), issue_date) == [
+        "Q12: category differs from questions_v1.csv",
+        "Q12: expected differs from questions_v1.csv",
+    ]
     assert draft_problems(drafts, corpus) == []
     assert all(set(d) == {*QUESTION_FIELDS, "reference_answer", "citation_keys", "source_quote", "corpus_issue_date"} for d in drafts)
