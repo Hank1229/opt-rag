@@ -2,7 +2,7 @@
 # (no dev or eval groups). Settings come from env vars at run time; none are baked in.
 FROM python:3.12.14-slim
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.12.9 /uv /bin/uv
 
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \

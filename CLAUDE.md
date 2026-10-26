@@ -8,7 +8,7 @@ every design decision must be explainable and every improvement must
 show up as a number.
 
 Stack: FastAPI + Supabase pgvector + Gemini (embedding and generation) +
-Ragas + React + Vite + TypeScript frontend. Deploy: Fly.io/Railway + Vercel.
+Ragas + React + Vite + TypeScript frontend. Deploy: Google Cloud Run + Vercel.
 
 ## Locked decisions (do not change without asking)
 
@@ -50,7 +50,9 @@ Ragas + React + Vite + TypeScript frontend. Deploy: Fly.io/Railway + Vercel.
 - pytest is an allowed dev dependency; tests live in tests/.
 - Tests run against local Supabase only. `pytest --target opt-rag` is
   retired and exits without running anything (DECISIONS.md, Step 07
-  "Cloud mode for test 8 retired").
+  "Cloud mode for test 8 retired"). Exception: tests/smoke/ hits the
+  deployed service (and through it OPT-RAG and Gemini) when
+  SMOKE_BASE_URL is set; unset, it skips. Hank sets it, not Claude.
 - After each step, report:
   1. files changed and the diff
   2. the exact command Hank should run to check it himself, and what
@@ -111,4 +113,7 @@ Ragas + React + Vite + TypeScript frontend. Deploy: Fly.io/Railway + Vercel.
 - Steps 06-08 done: Supabase schema, ingest, retrieval + /query.
 - Gold set v1 frozen in evals/gold_v1.jsonl (41 items: 31 answer,
   10 refuse; corpus eCFR 2026-09-14). Any change to it voids the baseline.
-- Next: step 10, Ragas baseline comparing opt-rag and bare Gemini.
+- Steps 10-11 done: Ragas baseline-v1 (evals/results/baseline-v1/),
+  React frontend.
+- Step 12 built, deploy pending: Dockerfile, deploy/cloudrun.sh,
+  runbook in deploy/README.md.
