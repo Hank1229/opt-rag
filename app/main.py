@@ -2,7 +2,7 @@
 
 Settings come from the process environment, then .env. DATABASE_URL is the
 exception: in .env it points at OPT-RAG, so the server reads it from the process
-environment only.
+environment only. CORS_ALLOWED_ORIGINS is optional: unset, no origin gets CORS headers.
 """
 
 import os
@@ -12,6 +12,7 @@ from typing import Annotated
 
 from dotenv import dotenv_values
 from fastapi import Depends, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, StringConstraints
 
 from app.db import connect
@@ -22,6 +23,14 @@ ROOT = Path(__file__).resolve().parent.parent
 ENV_FILE = dotenv_values(ROOT / ".env")
 
 app = FastAPI(title="opt-rag")
+
+CORS_ORIGINS = os.environ.get("CORS_ALLOWED_ORIGINS") or ENV_FILE.get("CORS_ALLOWED_ORIGINS") or ""
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[origin.strip() for origin in CORS_ORIGINS.split(",") if origin.strip()],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
+)
 
 
 def setting(name: str, default: str | None = None) -> str:

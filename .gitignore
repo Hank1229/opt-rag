@@ -19,3 +19,7 @@ data/cache/
 # Eval smoke runs and per-run query embedding caches (app/evals/cli.py)
 evals/results/smoke/
 evals/results/**/query_embeddings.jsonl
+
+# Frontend (frontend/)
+node_modules/
+frontend/dist/

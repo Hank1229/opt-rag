@@ -427,3 +427,34 @@ alternatives and rationale. Newest entries at the bottom.
 **Rationale**: bare Gemini scores higher on correctness because 8 CFR 214.2(f) is public and well represented in its training data; opt-rag's measurable advantage is refusal discipline and zero hallucinated citations. False refusals on three answer items account for most of the correctness gap and are the first v2 experiment. Three runs vary by at most 0.04 on judge-scored metrics; deterministic metrics are identical across runs. Full run cost: USD 3.36 of judge calls.
 
 **Caught**: the judge marked Q8 unsupported because the reference lacks the subject "unemployment"; Q9's reference embeds a citation that became a claim; Q2-type items have Tier 2 answers not listed in gold keys. Human check of 10 items: 7/10 agreement with the judge at a 0.5 threshold; the judge scored bare Q6 0.00 in run 1 and 1.00 in runs 2 and 3 on an identical answer, so judge-side variance exists even at temperature 0 with shared claims.
+
+## 2026-10-26 Step 11 frontend layout and integration
+
+**Decision**: Frontend lives in frontend/ inside the same repo. It calls
+FastAPI directly with a VITE_API_URL base URL; FastAPI gets
+CORSMiddleware with allowed origins from a CORS_ALLOWED_ORIGINS env var.
+CORS_ALLOWED_ORIGINS is optional: unset or empty allows no origin, so
+the test suite and eval CLI run without it. Origins are read once at
+import, so a change needs a restart. Four UI states (idle, loading,
+answer, error); refusal renders as a normal answer with no special
+marker. Each source shows its label, a source_tier tag, and a link to
+the source url; distance is hidden. Tests: Vitest + React Testing
+Library with mocked fetch for the four states and an empty-sources edge
+case, tsc --noEmit as typecheck, one pytest case for CORS. No e2e.
+**Rejected alternatives**: separate frontend repo (two READMEs and two
+histories for one demo); Vite dev proxy (production still needs CORS, so
+it adds a second path that dev never exercises); Vercel rewrites to the
+API (hides where requests go); a distinct refusal state (the /query
+response has no refused field and sources are returned even on refusal,
+so the frontend would have to string-match the answer; adding a backend
+field is a separate variable, deferred to v2); showing distance (a
+cosine distance number means nothing to users); Playwright e2e (needs a
+live backend and Gemini key to run).
+**Rationale**: One mechanism for dev and prod, the fewest moving parts
+for a one-page demo, and the source_tier tag makes a documented data
+decision visible to users. Tests keep step 11 on the same expected
+results -> test -> implement flow as the backend steps.
+**Caught**: Code review found that Vitest reads frontend/.env, so a
+VITE_API_URL set there made the test asserting the default URL fail
+(1 failed / 7 passed with VITE_API_URL=http://localhost:9000). Fixed by
+clearing VITE_API_URL in the Vitest env in vite.config.ts.

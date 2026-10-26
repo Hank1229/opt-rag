@@ -1,0 +1,61 @@
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  line-height: 1.5;
+  color: #1a1a1a;
+  background: #fff;
+}
+
+main {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px 16px;
+}
+
+form {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+label {
+  width: 100%;
+  font-weight: 600;
+}
+
+input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px;
+  font: inherit;
+}
+
+button {
+  padding: 8px 16px;
+  font: inherit;
+}
+
+.answer {
+  white-space: pre-wrap;
+}
+
+[role='alert'] {
+  color: #b00020;
+}
+
+ol {
+  list-style: none;
+  padding: 0;
+}
+
+li {
+  margin-bottom: 6px;
+}
+
+.tier {
+  font-size: 0.75em;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #eceff3;
+  color: #444;
+}
