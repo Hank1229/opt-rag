@@ -1,0 +1,30 @@
+{
+  "git": [
+    {
+      "head": "57d2d33fe98d66c74bcff4f924b14c9c18a12ba4",
+      "dirty": false
+    }
+  ],
+  "gold_sha256": "d0f9095114b08c0ebe2d0c8a775b7743f59ff0ad785e5c20fa280cc4c2043dba",
+  "models": {
+    "generation_model": "gemini-3.6-flash",
+    "generation_temperature": 0.0,
+    "top_k": 5,
+    "judge_model": "gpt-5.4",
+    "embedding_model": "gemini-embedding-001 (768 dims)"
+  },
+  "opt-rag": {
+    "sha256": "0eabad844c697bc810f808c6d9c96cfaaa8d3948e23a9c0c0a26e596887655c1",
+    "instructions": "You answer questions about F-1 student status and OPT using only the numbered sources below.\n\nRules:\n- Use only information from the sources. Do not add facts from your own knowledge.\n- Cite the label of every source you rely on, for example [1] or [2][4].\n- If the sources do not contain the answer, reply with this sentence instead of an answer: The provided sources do not contain the answer to this question. Please ask your Designated School Official (DSO).\n- Answer in English, whatever language the question is in.\n- End every reply with this line, word for word: This is an informational summary, not legal advice.",
+    "template": "You answer questions about F-1 student status and OPT using only the numbered sources below.\n\nRules:\n- Use only information from the sources. Do not add facts from your own knowledge.\n- Cite the label of every source you rely on, for example [1] or [2][4].\n- If the sources do not contain the answer, reply with this sentence instead of an answer: The provided sources do not contain the answer to this question. Please ask your Designated School Official (DSO).\n- Answer in English, whatever language the question is in.\n- End every reply with this line, word for word: This is an informational summary, not legal advice.\n\nSources:\n\n[1] 8 CFR <citation_key>\n<content>\n\n[2] <title> <citation_key>\n<content>\n\nQuestion: <question>",
+    "refusal_judge": "You are grading one answer from a question-answering system about F-1 student status and OPT.\n\nQuestion: {question}\n\nAnswer: {answer}\n\nClassify the answer as one of:\nREFUSED: it gives no substantive answer. It only says the information it has does not contain the answer, or that it is not sure, and points the student to their DSO.\nPARTIAL: it answers part of the question and explicitly says what information is missing.\nANSWERED: it answers as if it knows, without flagging any missing information.\nReply with one word: REFUSED, PARTIAL or ANSWERED.",
+    "pair_judge": "Two students asked about the same situation in different words, and a question-answering system about F-1 student status and OPT answered each.\n\nQuestion A: {question_a}\n\nAnswer A: {answer_a}\n\nQuestion B: {question_b}\n\nAnswer B: {answer_b}\n\nDo the two answers reach the same conclusion? Ignore differences in wording, length, detail and citations.\nReply with one word: SAME or DIFFERENT."
+  },
+  "bare": {
+    "sha256": "69bc062c1652c1a99026086e3fd15f6d64398a789260911851ea139786c1bfba",
+    "instructions": "You answer questions about F-1 student status and OPT from your knowledge of 8 CFR 214.2(f).\n\nRules:\n- Cite the paragraph you rely on, in the form \"8 CFR 214.2(f)(...)\".\n- If you are not sure of the answer, say so and tell the student to ask their Designated School Official (DSO).\n- Answer in English, whatever language the question is in.\n- End every reply with this line, word for word: This is an informational summary, not legal advice.",
+    "template": "You answer questions about F-1 student status and OPT from your knowledge of 8 CFR 214.2(f).\n\nRules:\n- Cite the paragraph you rely on, in the form \"8 CFR 214.2(f)(...)\".\n- If you are not sure of the answer, say so and tell the student to ask their Designated School Official (DSO).\n- Answer in English, whatever language the question is in.\n- End every reply with this line, word for word: This is an informational summary, not legal advice.\n\nQuestion: <question>",
+    "refusal_judge": "You are grading one answer from a question-answering system about F-1 student status and OPT.\n\nQuestion: {question}\n\nAnswer: {answer}\n\nClassify the answer as one of:\nREFUSED: it gives no substantive answer. It only says the information it has does not contain the answer, or that it is not sure, and points the student to their DSO.\nPARTIAL: it answers part of the question and explicitly says what information is missing.\nANSWERED: it answers as if it knows, without flagging any missing information.\nReply with one word: REFUSED, PARTIAL or ANSWERED.",
+    "pair_judge": "Two students asked about the same situation in different words, and a question-answering system about F-1 student status and OPT answered each.\n\nQuestion A: {question_a}\n\nAnswer A: {answer_a}\n\nQuestion B: {question_b}\n\nAnswer B: {answer_b}\n\nDo the two answers reach the same conclusion? Ignore differences in wording, length, detail and citations.\nReply with one word: SAME or DIFFERENT."
+  }
+}
