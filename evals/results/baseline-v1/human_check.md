@@ -20,7 +20,7 @@ Sample: run 1 answer items, Python random.Random(42), opt-rag first then bare. W
 
 **Judge score**: 0.00
 
-**Human score (0 or 1)**: 
+**Human score (0 or 1)**: 1 
 
 ## 2. P05-N (opt-rag)
 
@@ -36,7 +36,7 @@ Sample: run 1 answer items, Python random.Random(42), opt-rag first then bare. W
 
 **Judge score**: 0.00
 
-**Human score (0 or 1)**: 
+**Human score (0 or 1)**: 0
 
 ## 3. Q14 (opt-rag)
 
@@ -66,7 +66,7 @@ Sample: run 1 answer items, Python random.Random(42), opt-rag first then bare. W
 
 **Judge score**: 0.83
 
-**Human score (0 or 1)**: 
+**Human score (0 or 1)**: 1
 
 ## 4. Q20 (opt-rag)
 
@@ -84,7 +84,7 @@ Sample: run 1 answer items, Python random.Random(42), opt-rag first then bare. W
 
 **Judge score**: 1.00
 
-**Human score (0 or 1)**: 
+**Human score (0 or 1)**: 1
 
 ## 5. Q6 (opt-rag)
 
@@ -100,7 +100,7 @@ Sample: run 1 answer items, Python random.Random(42), opt-rag first then bare. W
 
 **Judge score**: 1.00
 
-**Human score (0 or 1)**: 
+**Human score (0 or 1)**: 1
 
 ## 6. Q6 (bare)
 
@@ -118,7 +118,7 @@ Sample: run 1 answer items, Python random.Random(42), opt-rag first then bare. W
 
 **Judge score**: 0.00
 
-**Human score (0 or 1)**: 
+**Human score (0 or 1)**: 1
 
 ## 7. Q15 (bare)
 
@@ -142,7 +142,7 @@ Sample: run 1 answer items, Python random.Random(42), opt-rag first then bare. W
 
 **Judge score**: 0.33
 
-**Human score (0 or 1)**: 
+**Human score (0 or 1)**: 0
 
 ## 8. Q13 (bare)
 
@@ -168,7 +168,7 @@ Sample: run 1 answer items, Python random.Random(42), opt-rag first then bare. W
 
 **Judge score**: 0.57
 
-**Human score (0 or 1)**: 
+**Human score (0 or 1)**: 0
 
 ## 9. P04-N (bare)
 
@@ -186,7 +186,7 @@ Sample: run 1 answer items, Python random.Random(42), opt-rag first then bare. W
 
 **Judge score**: 1.00
 
-**Human score (0 or 1)**: 
+**Human score (0 or 1)**: 1
 
 ## 10. P01-L (bare)
 
@@ -206,4 +206,10 @@ Sample: run 1 answer items, Python random.Random(42), opt-rag first then bare. W
 
 **Judge score**: 1.00
 
-**Human score (0 or 1)**: 
+**Human score (0 or 1)**: 1
+
+## Result
+
+Agreement (judge score >= 0.5 vs human 1): 7/10.
+Disagreements: Q8 opt-rag (judge 0.00, human 1: subject-less reference, dataset issue), Q6 bare (judge 0.00, human 1: NLI verdict flipped in run 1; runs 2 and 3 scored 1.0), Q13 bare (judge 0.57, human 0: answer covers 3 of 6 reference conditions; the judge's claim split let it pass the 0.5 threshold).
+Human scoring rule applied: strict, as stated above.
