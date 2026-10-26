@@ -3,6 +3,8 @@
 Settings come from the process environment, then .env. DATABASE_URL is the
 exception: in .env it points at OPT-RAG, so the server reads it from the process
 environment only. CORS_ALLOWED_ORIGINS is optional: unset, no origin gets CORS headers.
+The rest are read per request, so the server starts with none set and /query returns
+503 naming the first one missing.
 """
 
 import os
@@ -13,6 +15,7 @@ from typing import Annotated
 from dotenv import dotenv_values
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, StringConstraints
 
 from app.db import connect
@@ -33,13 +36,22 @@ app.add_middleware(
 )
 
 
+class MissingSetting(RuntimeError):
+    pass
+
+
+@app.exception_handler(MissingSetting)
+def missing_setting(request, exc: MissingSetting) -> JSONResponse:
+    return JSONResponse(status_code=503, content={"detail": str(exc)})
+
+
 def setting(name: str, default: str | None = None) -> str:
     value = os.environ.get(name)
     if value is None and name != "DATABASE_URL":
         value = ENV_FILE.get(name)
     value = value or default
     if not value:
-        raise RuntimeError(f"{name} is not set")
+        raise MissingSetting(f"{name} is not set")
     return value
 
 

@@ -94,6 +94,14 @@ Ragas + React + Vite + TypeScript frontend. Deploy: Fly.io/Railway + Vercel.
 - Before reporting a step as done, re-read your own diff against that
   skill and fix what it flags.
 
+## Setup
+
+- Local development, tests, and the eval runner:
+  `uv sync --frozen --group dev --group eval`. The full pytest suite
+  needs the eval group (tests/test_eval.py imports ragas).
+- API server only, as the Docker image installs it:
+  `uv sync --frozen --no-dev`. ragas and langchain are not installed.
+
 ## Current state
 
 - Skeleton done: uv, FastAPI /health, .env.example, first commit made.

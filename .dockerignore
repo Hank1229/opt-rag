@@ -1,0 +1,18 @@
+# Build context for the Dockerfile: only pyproject.toml, uv.lock, .python-version,
+# app/ and small repo files reach it. Keep in sync with .gcloudignore.
+frontend/
+data/
+evals/
+docs/
+tests/
+reports/
+.git
+.venv
+.claude
+.env
+.env.*
+.pytest_cache
+**/__pycache__
+**/*.pyc
+**/node_modules
+**/.DS_Store

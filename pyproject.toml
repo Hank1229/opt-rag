@@ -20,12 +20,15 @@ build-backend = "hatchling.build"
 packages = ["app"]
 
 [dependency-groups]
-# ragas, langchain-*: step 10 eval judge only. ragas 0.4.3 imports
-# langchain_community.chat_models.vertexai, which langchain-community 0.4 removed.
 dev = [
+    "pytest>=9.1.1",
+]
+# Step 10 eval judge only; not a default group, so the server image never gets it.
+# ragas 0.4.3 imports langchain_community.chat_models.vertexai, which
+# langchain-community 0.4 removed.
+eval = [
     "langchain-community<0.4",
     "langchain-openai>=1.7.2",
-    "pytest>=9.1.1",
     "ragas==0.4.3",
 ]
 

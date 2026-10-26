@@ -919,9 +919,11 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "pytest" },
+]
+eval = [
     { name = "langchain-community" },
     { name = "langchain-openai" },
-    { name = "pytest" },
     { name = "ragas" },
 ]
 
@@ -936,10 +938,10 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
-dev = [
+dev = [{ name = "pytest", specifier = ">=9.1.1" }]
+eval = [
     { name = "langchain-community", specifier = "<0.4" },
     { name = "langchain-openai", specifier = ">=1.7.2" },
-    { name = "pytest", specifier = ">=9.1.1" },
     { name = "ragas", specifier = "==0.4.3" },
 ]
 

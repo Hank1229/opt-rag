@@ -1,0 +1,19 @@
+# Upload filter for `gcloud run deploy --source .`. Without this file gcloud falls back
+# to .gitignore, which would upload data/, evals/ and frontend/. Keep in sync with .dockerignore.
+.gcloudignore
+frontend/
+data/
+evals/
+docs/
+tests/
+reports/
+.git
+.venv
+.claude
+.env
+.env.*
+.pytest_cache
+__pycache__/
+*.pyc
+node_modules/
+.DS_Store

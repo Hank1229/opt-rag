@@ -1,9 +1,9 @@
 """Eval CLI: run the step 10 baseline (opt-rag vs bare Gemini) against local Supabase, or summarize a run.
 
 Usage:
-  uv run python scripts/eval.py run --arm both --runs 3 --run-id baseline
-  uv run python scripts/eval.py run --arm both --runs 1 --qids Q1 Q2 Q3 Q12 P01-N P01-L --run-id smoke
-  uv run python scripts/eval.py summary --run-id smoke
+  uv run --group eval python scripts/eval.py run --arm both --runs 3 --run-id baseline
+  uv run --group eval python scripts/eval.py run --arm both --runs 1 --qids Q1 Q2 Q3 Q12 P01-N P01-L --run-id smoke
+  uv run --group eval python scripts/eval.py summary --run-id smoke
 
 Everything for a run lives in evals/results/<run_id>/: raw.jsonl, pairs.jsonl, failures.jsonl,
 prompts.json, reference_claims.jsonl, query_embeddings.jsonl and summary.md. Generation uses the same generator settings as /query.
