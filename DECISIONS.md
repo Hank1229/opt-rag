@@ -458,9 +458,41 @@ results -> test -> implement flow as the backend steps.
 VITE_API_URL set there made the test asserting the default URL fail
 (1 failed / 7 passed with VITE_API_URL=http://localhost:9000). Fixed by
 clearing VITE_API_URL in the Vitest env in vite.config.ts.
-## 2026-10-26 Step 12 deploy: Cloud Run backend, Vercel frontend
+## 2026-10-26 Step 12: Deploy
 
-**Decision**: The backend runs on Google Cloud Run (us-east1, min-instances 0, 512Mi, 1 CPU, unauthenticated) from the repo-root Dockerfile, deployed with `gcloud run deploy --source .` by deploy/cloudrun.sh, capped at 1 instance and 10 concurrent requests (added after code review; pending my confirmation). GEMINI_API_KEY and DATABASE_URL are Secret Manager secrets mounted with --set-secrets; GEMINI_GENERATION_MODEL, RETRIEVAL_TOP_K and CORS_ALLOWED_ORIGINS are plain env vars. DATABASE_URL is OPT-RAG's session pooler string. The frontend is a Vercel project with Root Directory frontend/ and VITE_API_URL set to the Cloud Run URL. Eval-only packages (ragas, langchain-openai, langchain-community) move to a non-default `eval` dependency group, and the image installs with `uv sync --frozen --no-dev`. The image is python:3.12.14-slim, runs uvicorn from the venv as a non-root user, and keeps no uv cache. A missing setting makes /query return 503 with `{"detail": "<NAME> is not set"}` instead of a 500; the server starts and serves /health with no settings at all. tests/smoke/ runs against a live URL only when SMOKE_BASE_URL is set.
-**Rejected alternatives**: Fly.io/Railway (the earlier CLAUDE.md stack); eval packages in dev (the server image would carry ragas and langchain); `uv run` as the container command (syncs at start-up); secrets as plain env vars; the env var name GEMINI_MODEL (the code reads GEMINI_GENERATION_MODEL, so /query would fail on every request); RuntimeError surfacing as a 500 (a misconfigured deploy would look like an app bug).
-**Rationale**: Scale-to-zero keeps an idle demo free, and the one Dockerfile builds the same image locally and in Cloud Build, so the local Docker check exercises what Cloud Run runs. The server never imports ragas or langchain, so the image does not install them. A named 503 makes a missing secret obvious from one curl.
-**Caught**: The first image kept uv's download cache in the dependency layer (138 MB); UV_NO_CACHE=1 cut it to 74 MB and the image from 436 MB to 353 MB (local arm64 build).
+**Decision**
+- Backend on Google Cloud Run (us-east1, min-instances 0, max-instances 1, concurrency 10, 512Mi); frontend on Vercel (project `opt-rag`, Root Directory `frontend/`, https://opt-rag.vercel.app).
+- Hand-written Dockerfile: `python:3.12.14-slim`, uv pinned to 0.12.9 (same version that generated `uv.lock`), two-stage dependency copy, `uv sync --frozen --no-dev`, non-root user, uvicorn reads `$PORT`. Eval-only packages moved to a `uv` dependency group so they stay out of the runtime image. Image: 368 MB (arm64 local build).
+- `GEMINI_API_KEY` and `DATABASE_URL` in Secret Manager, mounted with `--set-secrets`; non-secrets via `--set-env-vars`. Secrets created from stdin, never from a file.
+- `DATABASE_URL` uses the Supabase session pooler (port 5432, `sslmode=require`).
+- Missing config returns 503 with the missing variable name; the container still starts and `/health` returns 200.
+- Smoke tests in `tests/smoke/`, skipped unless `SMOKE_BASE_URL` is set (only Hank sets it).
+- Frontend `build` runs `tsc --noEmit` before `vite build`.
+- Measured: cold start ~4.9 s, warm ~0.2 s (first request, GET /health). Cloud Run logs confirm the instance shut down after ~15 min idle and a new server process started ~4 s after the next request arrived. Warm `/query` takes 4–5 s, dominated by Gemini generation.
+
+**Rejected alternatives**
+- Fly.io / Railway: the Day 1 choice assumed free tiers that no longer exist for new accounts; Railway's free plan caps at 0.5 GB RAM and $1/month credit.
+- Render Free: $0, but ~1 minute spin-up after 15 minutes idle, and the platform name carries no weight on a resume.
+- Hugging Face Spaces: Docker Spaces now require a paid plan.
+- Supabase direct connection: IPv6-only without the paid IPv4 add-on.
+- Supabase transaction pooler: no prepared statements, which psycopg uses by default.
+- Secrets in committed config or build args: config is committed; build args persist in image layers.
+- uv 0.13.5 in the image: would differ from the uv that wrote `uv.lock`.
+
+**Rationale**
+Cloud Run is $0 at this traffic under the Always Free tier, scales to zero, and the GCP project already holds the Gemini billing account. The instance and concurrency caps bound Gemini spend and Supabase pool usage on a public endpoint with no rate limit. Pinning uv and splitting eval dependencies keep the image reproducible and small.
+
+**Caught**
+- Env var name: the deploy spec said `GEMINI_MODEL`, the app reads `GEMINI_GENERATION_MODEL` (step 08). Deploying the spec as written would have returned 503 on every `/query`.
+- Code review (High): no instance or concurrency cap on a public, unauthenticated endpoint; default 100 instances × 80 concurrency could burn Gemini spend and exhaust the session pool. Fixed with `--max-instances 1 --concurrency 10`.
+- uv download cache left in the dependency layer: 436 MB → 353 MB with `UV_NO_CACHE=1`.
+- The deployed UI prints Gemini's markdown literally (`**bold**`).
+
+**v2 backlog**
+- Dedicated Cloud Run service account with only `secretmanager.secretAccessor` (the default compute account has `roles/editor`).
+- Rate limiting on `/query`; a DB connection pool; psycopg connection errors return 503 instead of 500.
+- `allow_origin_regex` for Vercel Preview deployments.
+- Multi-stage Docker build to drop the uv binary (~46 MB) from the runtime image.
+- Show only cited sources (or mark them) in the UI; shorten Tier 2 labels.
+- Redeploy the same image to AWS (ECS Fargate or App Runner).
+- Upgrade uv as a separate one-variable change.
