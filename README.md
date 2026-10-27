@@ -10,9 +10,9 @@ The backend scales to zero: first request ~4.9 s, then ~0.2 s (measured on `GET 
 
 I ran my 41-question gold set through opt-rag and through bare Gemini, 3 runs each. The headline:
 
-- opt-rag cited no paragraph that does not exist. Unknown citation rate: 0.000 for opt-rag, 0.060 for bare Gemini ([summary.md](evals/results/baseline-v1/summary.md)).
-- opt-rag refused 0.833 of the questions the corpus cannot answer. Bare Gemini refused 0.300 (summary.md).
-- opt-rag loses on answer correctness: 0.757 against 0.840 for bare Gemini (summary.md).
+- opt-rag cited no paragraph that does not exist: 0 unknown citations vs 6% for bare Gemini ([summary.md](evals/results/baseline-v1/summary.md)).
+- On questions the corpus cannot answer, opt-rag refused 8.3 of 10 vs 3 of 10 for bare Gemini (summary.md).
+- opt-rag loses on answer correctness: 0.757 vs 0.840 for bare Gemini (summary.md).
 
 | Metric | opt-rag | bare Gemini |
 |---|---|---|
@@ -59,7 +59,7 @@ flowchart LR
 ## Eval method
 
 - Gold set v1: 41 questions I wrote by hand, seeded from OPT questions my classmates and I actually asked. 31 are answer items and 10 are refuse items. The set includes 5 pairs that ask the same thing neutrally and with a leading preference ([evals/README.md](evals/README.md)).
-- An LLM drafted the reference answers. Codex cross-checked them against the corpus, and I reviewed each one. The file is hash-frozen; any change voids the baseline.
+- An LLM drafted the reference answers. Codex cross-checked them against the corpus, and I reviewed each one ([DECISIONS.md](DECISIONS.md#2026-10-23-gold-set-v1-frozen)). The file is hash-frozen; any change voids the baseline.
 - Two arms with the same generation model. opt-rag answers from the retrieved sources. Bare Gemini answers from its own knowledge, with the same citation, refusal, and disclaimer rules ([DECISIONS.md](DECISIONS.md#2026-10-24-step-10-bare-arm-prompt-factualcorrectness-mode-smoke-scope)).
 - Judge: gpt-5.4 ([summary.md](evals/results/baseline-v1/summary.md), line 5), from a different vendor than the generator. 3 runs per arm (summary.md, line 11).
 - Citation accuracy, unknown citation rate, hit@5, and MRR are computed in code, with no judge.
@@ -99,7 +99,7 @@ npm install
 npm run dev                       # http://localhost:5173
 ```
 
-Run the tests. The backend suite needs local Supabase running; the frontend suite mocks fetch.
+Run the tests. The backend suite needs local Supabase running; the frontend suite mocks fetch. The backend suite resets the local Supabase database (supabase db reset in conftest). Run scripts/ingest.py again before manual /query calls.
 
 ```sh
 uv run pytest
@@ -143,7 +143,7 @@ The full runbook, including one-time setup and secrets, is in [deploy/README.md]
 
 Limitations:
 
-- The corpus is pinned to eCFR issue date 2026-09-14, the last day before the Duration of Status amendment took effect. Answers do not reflect later rules.
+- The corpus is pinned to eCFR issue date 2026-09-14, the last version before the DHS Duration of Status rule's text entered the eCFR. That rule is enjoined; the 2026-10-01 snapshot carried its 30-day grace period, which conflicts with the 60 days on Study in the States ([DECISIONS.md](DECISIONS.md#2026-10-22-tier-1-re-pinned-to-ecfr-issue-date-2026-09-14)).
 - opt-rag wrongly refused 1 to 3 of 31 answerable questions per run (summary.md, line 27). These false refusals account for most of the correctness gap (DECISIONS.md).
 - The judge is not deterministic. It scored one identical answer 0.00 in one run and 1.00 in the other two (human_check.md).
 - Refusal is prompt-only. The API has no refused field, so the page shows a refusal as a normal answer.
