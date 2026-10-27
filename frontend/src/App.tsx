@@ -1,6 +1,7 @@
 // Single-page question form: posts to the FastAPI /query endpoint and shows the answer and its sources.
-import { useEffect, useState, type FormEvent } from 'react'
-import Markdown from 'react-markdown'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
+import Markdown, { type Components } from 'react-markdown'
+import remarkBreaks from 'remark-breaks'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
@@ -10,38 +11,44 @@ type Answer = { answer: string; sources: Source[] }
 
 type State =
   | { status: 'idle' }
-  | { status: 'loading' }
+  | { status: 'loading'; waking: boolean }
   | { status: 'answer'; reply: Answer }
   | { status: 'error' }
 
-// Source numbers the answer cites as [n], 1-based like the source labels.
+// Same grammar as LABEL in app/evals/metrics.py, so the page and the eval agree on what is cited.
+const LABEL = /\[(\d+(?:\s*,\s*\d+)*)\]/g
+
+// Source numbers the answer cites as [n] or [n, m], 1-based like the source labels.
 function citedNumbers(answer: string) {
-  return new Set([...answer.matchAll(/\[(\d+)\]/g)].map((match) => Number(match[1])))
+  return new Set([...answer.matchAll(LABEL)].flatMap((match) => match[1].split(',').map(Number)))
+}
+
+// The answer is model output: links leave in a new tab, and images (dropped below) never load outside URLs.
+const answerComponents: Components = {
+  a: ({ href, children }) => (
+    <a href={href} target="_blank" rel="noopener noreferrer">
+      {children}
+    </a>
+  ),
 }
 
 export default function App() {
   const [question, setQuestion] = useState('')
   const [state, setState] = useState<State>({ status: 'idle' })
-  const [slow, setSlow] = useState(false)
+  const warm = useRef(false)
 
   // The backend scales to zero; start its cold start while the user is still typing.
+  // A failed ping also counts as settled: the server is not waking, and /query reports its own error.
   useEffect(() => {
-    fetch(`${API_URL}/health`).catch(() => {})
+    fetch(`${API_URL}/health`)
+      .catch(() => {})
+      .finally(() => (warm.current = true))
   }, [])
-
-  useEffect(() => {
-    if (state.status !== 'loading') return
-    const timer = setTimeout(() => setSlow(true), 3000)
-    return () => {
-      clearTimeout(timer)
-      setSlow(false)
-    }
-  }, [state.status])
 
   async function ask(event: FormEvent) {
     event.preventDefault()
     if (!question.trim()) return
-    setState({ status: 'loading' })
+    setState({ status: 'loading', waking: !warm.current })
     try {
       const response = await fetch(`${API_URL}/query`, {
         method: 'POST',
@@ -69,14 +76,16 @@ export default function App() {
       {state.status === 'loading' && (
         <>
           <p>Searching the regulations...</p>
-          {slow && <p>Waking up the server, the first request can take about 5 s.</p>}
+          {state.waking && <p>Waking up the server, the first answer can take about 10 s.</p>}
         </>
       )}
       {state.status === 'error' && <p role="alert">Something went wrong. Please try again.</p>}
       {state.status === 'answer' && (
         <>
-          <div data-testid="answer" className="answer">
-            <Markdown>{state.reply.answer}</Markdown>
+          <div data-testid="answer">
+            <Markdown remarkPlugins={[remarkBreaks]} components={answerComponents} disallowedElements={['img']}>
+              {state.reply.answer}
+            </Markdown>
           </div>
           {state.reply.sources.length > 0 && (
             <Sources sources={state.reply.sources} cited={citedNumbers(state.reply.answer)} />

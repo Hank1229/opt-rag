@@ -1,5 +1,6 @@
 // Step 11 and 13 tests: the question form, its states, answer rendering, and citation markers, with fetch mocked.
-// Numbered tests map to Hank's expected results (Step 11: 1-5, Step 13: S13-1 to S13-3);
+// Numbered tests map to Hank's expected results (Step 11: 1-5, Step 13: S13-1 to S13-3,
+// review follow-ups of Step 13: F1 to F5);
 // "extra" tests are edge cases added by Claude.
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, expect, test, vi } from 'vitest'
@@ -28,7 +29,6 @@ const SOURCES = [
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
-  vi.useRealTimers()
 })
 
 // reply answers /query; the mount-time /health ping always gets a 200 unless health is given.
@@ -45,7 +45,7 @@ function json(body: unknown, status = 200) {
 }
 
 const SEARCHING = 'Searching the regulations...'
-const WAKING = 'Waking up the server, the first request can take about 5 s.'
+const WAKING = 'Waking up the server, the first answer can take about 10 s.'
 
 const input = () => screen.getByLabelText('Question') as HTMLInputElement
 const button = () => screen.getByRole('button', { name: 'Ask' }) as HTMLButtonElement
@@ -201,51 +201,12 @@ test('S13-2b: answer cites [7] with 5 sources -> no crash, all 5 retrieved, not 
   expect(markers()).toEqual(Array(5).fill('retrieved, not cited'))
 })
 
-test('S13-2 extra: adjacent citations [2][4], the prompt\'s documented form, mark both', async () => {
+test('S13-2 extra, F1b: adjacent citations [2][4], the prompt\'s documented form, mark both', async () => {
   mockFetch(() => json({ answer: 'Both apply [2][4].', sources: FIVE_SOURCES }))
   render(<App />)
   await ask()
   expect(markers()).toEqual(['retrieved, not cited', 'cited', 'retrieved, not cited', 'cited', 'retrieved, not cited'])
   expect(screen.getByTestId('answer').textContent).toBe('Both apply [2][4].')
-})
-
-test('S13-3a: request pending past 3 s -> the wake-up line appears under the searching line', async () => {
-  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-  mockFetch(() => new Promise(() => {}))
-  render(<App />)
-  await ask()
-  expect(screen.getByText(SEARCHING)).toBeTruthy()
-  expect(screen.queryByText(WAKING)).toBeNull()
-  act(() => vi.advanceTimersByTime(3001))
-  expect(screen.getByText(SEARCHING)).toBeTruthy()
-  expect(screen.getByText(WAKING)).toBeTruthy()
-})
-
-test('S13-3b: request resolved in 1 s -> the wake-up line never appears', async () => {
-  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-  let resolve!: (response: Response) => void
-  mockFetch(() => new Promise((r) => (resolve = r)))
-  render(<App />)
-  await ask()
-  act(() => vi.advanceTimersByTime(1000))
-  await act(async () => resolve(new Response(JSON.stringify({ answer: 'Done.', sources: [] }))))
-  act(() => vi.advanceTimersByTime(10000))
-  expect(screen.queryByText(WAKING)).toBeNull()
-  expect(screen.getByTestId('answer').textContent).toBe('Done.')
-})
-
-test('S13-3 extra: a second question after a slow first one starts without the wake-up line', async () => {
-  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-  let resolve!: (response: Response) => void
-  const fetch = mockFetch(() => new Promise((r) => (resolve = r)))
-  render(<App />)
-  await ask()
-  act(() => vi.advanceTimersByTime(3001))
-  await act(async () => resolve(new Response(JSON.stringify({ answer: 'Done.', sources: [] }))))
-  fetch.mockImplementation(() => new Promise(() => {}))
-  await ask()
-  expect(screen.getByText(SEARCHING)).toBeTruthy()
-  expect(screen.queryByText(WAKING)).toBeNull()
 })
 
 test('S13-3c: mount -> exactly one fetch, a GET to /health, none to /query', async () => {
@@ -264,4 +225,130 @@ test('S13-3 extra: a failed /health ping shows no error and the form still works
   expect(screen.queryByRole('alert')).toBeNull()
   await ask()
   expect(screen.getByTestId('answer').textContent).toBe('Done.')
+})
+
+// Step 13 review follow-ups
+
+test('F1a: a comma list [1, 3] marks sources 1 and 3 cited, as LABEL in app/evals/metrics.py does', async () => {
+  mockFetch(() => json({ answer: 'Both apply [1, 3].', sources: FIVE_SOURCES }))
+  render(<App />)
+  await ask()
+  expect(markers()).toEqual(['cited', 'retrieved, not cited', 'cited', 'retrieved, not cited', 'retrieved, not cited'])
+})
+
+test('F1c: brackets LABEL does not match ([ 2], [3a], [1-3], (4), [5,]) mark nothing cited', async () => {
+  mockFetch(() => json({ answer: 'See [ 2], [3a], [1-3], (4), [5,].', sources: FIVE_SOURCES }))
+  render(<App />)
+  await ask()
+  expect(markers()).toEqual(Array(5).fill('retrieved, not cited'))
+})
+
+test('F1 extra: comma lists with uneven spacing ([1,2 , 5]) mark every number', async () => {
+  mockFetch(() => json({ answer: 'All apply [1,2 , 5].', sources: FIVE_SOURCES }))
+  render(<App />)
+  await ask()
+  expect(markers()).toEqual(['cited', 'cited', 'retrieved, not cited', 'retrieved, not cited', 'cited'])
+})
+
+test('F2a: /health still pending at submit -> wake-up line under the searching line, gone when the answer arrives', async () => {
+  let resolve!: (response: Response) => void
+  mockFetch(
+    () => new Promise((r) => (resolve = r)),
+    () => new Promise(() => {}),
+  )
+  render(<App />)
+  await ask()
+  expect(screen.getByText(SEARCHING)).toBeTruthy()
+  expect(screen.getByText(WAKING)).toBeTruthy()
+  await act(async () => resolve(new Response(JSON.stringify({ answer: 'Done.', sources: [] }))))
+  expect(screen.queryByText(WAKING)).toBeNull()
+  expect(screen.getByTestId('answer').textContent).toBe('Done.')
+})
+
+test('F2b: /health resolved before submit -> wake-up line never shows', async () => {
+  let resolve!: (response: Response) => void
+  mockFetch(() => new Promise((r) => (resolve = r)))
+  await act(async () => render(<App />))
+  await ask()
+  expect(screen.getByText(SEARCHING)).toBeTruthy()
+  expect(screen.queryByText(WAKING)).toBeNull()
+  await act(async () => resolve(new Response(JSON.stringify({ answer: 'Done.', sources: [] }))))
+  expect(screen.queryByText(WAKING)).toBeNull()
+})
+
+test('F2c: /health failed before submit -> wake-up line never shows', async () => {
+  mockFetch(
+    () => new Promise(() => {}),
+    () => Promise.reject(new TypeError('Failed to fetch')),
+  )
+  await act(async () => render(<App />))
+  await ask()
+  expect(screen.getByText(SEARCHING)).toBeTruthy()
+  expect(screen.queryByText(WAKING)).toBeNull()
+})
+
+test('F2 extra: /health resolving mid-request keeps the line until the answer; the next question has none', async () => {
+  let resolveHealth!: (response: Response) => void
+  let resolve!: (response: Response) => void
+  const fetch = mockFetch(
+    () => new Promise((r) => (resolve = r)),
+    () => new Promise((r) => (resolveHealth = r)),
+  )
+  render(<App />)
+  await ask()
+  await act(async () => resolveHealth(new Response(JSON.stringify({ status: 'ok' }))))
+  expect(screen.getByText(WAKING)).toBeTruthy()
+  await act(async () => resolve(new Response(JSON.stringify({ answer: 'Done.', sources: [] }))))
+  fetch.mockImplementation(() => new Promise(() => {}))
+  await ask()
+  expect(screen.getByText(SEARCHING)).toBeTruthy()
+  expect(screen.queryByText(WAKING)).toBeNull()
+})
+
+test('F2 extra: an error response also clears the wake-up line', async () => {
+  mockFetch(
+    () => json({}, 503),
+    () => new Promise(() => {}),
+  )
+  render(<App />)
+  await ask()
+  expect(screen.getByRole('alert')).toBeTruthy()
+  expect(screen.queryByText(WAKING)).toBeNull()
+})
+
+test('F4a: a single newline renders as a line break inside one paragraph', async () => {
+  mockFetch(() => json({ answer: 'line one\nline two', sources: [] }))
+  render(<App />)
+  await ask()
+  const answer = screen.getByTestId('answer')
+  expect(answer.querySelectorAll('p')).toHaveLength(1)
+  expect(answer.querySelectorAll('br')).toHaveLength(1)
+})
+
+test('F4b: a blank line still separates two paragraphs', async () => {
+  mockFetch(() => json({ answer: 'para\n\npara', sources: [] }))
+  render(<App />)
+  await ask()
+  const answer = screen.getByTestId('answer')
+  expect([...answer.querySelectorAll('p')].map((p) => p.textContent)).toEqual(['para', 'para'])
+  expect(answer.querySelector('br')).toBeNull()
+})
+
+test('F5a: a markdown link from the model opens in a new tab with noopener noreferrer', async () => {
+  mockFetch(() => json({ answer: 'See [eCFR](https://example.com).', sources: [] }))
+  render(<App />)
+  await ask()
+  const link = screen.getByTestId('answer').querySelector('a')!
+  expect(link.textContent).toBe('eCFR')
+  expect(link.getAttribute('href')).toBe('https://example.com')
+  expect(link.getAttribute('target')).toBe('_blank')
+  expect(link.getAttribute('rel')).toBe('noopener noreferrer')
+})
+
+test('F5b: a markdown image from the model renders no <img>', async () => {
+  mockFetch(() => json({ answer: 'Look ![x](https://example.com/a.png) here.', sources: [] }))
+  render(<App />)
+  await ask()
+  expect(screen.getByTestId('answer').querySelector('img')).toBeNull()
+  expect(document.querySelector('img')).toBeNull()
 })
