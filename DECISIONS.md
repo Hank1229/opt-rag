@@ -469,6 +469,7 @@ clearing VITE_API_URL in the Vitest env in vite.config.ts.
 - Smoke tests in `tests/smoke/`, skipped unless `SMOKE_BASE_URL` is set (only Hank sets it).
 - Frontend `build` runs `tsc --noEmit` before `vite build`.
 - Measured: cold start ~4.9 s, warm ~0.2 s (first request, GET /health). Cloud Run logs confirm the instance shut down after ~15 min idle and a new server process started ~4 s after the next request arrived. Warm `/query` takes 4–5 s, dominated by Gemini generation.
+- Monthly budget alert: $10 across all projects on the billing account, emails at 50% / 90% actual and 100% forecasted. Alerts only; the instance cap is the actual spend limit.
 
 **Rejected alternatives**
 - Fly.io / Railway: the Day 1 choice assumed free tiers that no longer exist for new accounts; Railway's free plan caps at 0.5 GB RAM and $1/month credit.
