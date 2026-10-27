@@ -1,1 +1,3 @@
 evals/gold_v1.jsonl -text
+data/raw/** linguist-vendored
+evals/results/** linguist-vendored
