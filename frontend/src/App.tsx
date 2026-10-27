@@ -1,5 +1,6 @@
 // Single-page question form: posts to the FastAPI /query endpoint and shows the answer and its sources.
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
+import Markdown from 'react-markdown'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
@@ -13,9 +14,29 @@ type State =
   | { status: 'answer'; reply: Answer }
   | { status: 'error' }
 
+// Source numbers the answer cites as [n], 1-based like the source labels.
+function citedNumbers(answer: string) {
+  return new Set([...answer.matchAll(/\[(\d+)\]/g)].map((match) => Number(match[1])))
+}
+
 export default function App() {
   const [question, setQuestion] = useState('')
   const [state, setState] = useState<State>({ status: 'idle' })
+  const [slow, setSlow] = useState(false)
+
+  // The backend scales to zero; start its cold start while the user is still typing.
+  useEffect(() => {
+    fetch(`${API_URL}/health`).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    if (state.status !== 'loading') return
+    const timer = setTimeout(() => setSlow(true), 3000)
+    return () => {
+      clearTimeout(timer)
+      setSlow(false)
+    }
+  }, [state.status])
 
   async function ask(event: FormEvent) {
     event.preventDefault()
@@ -45,30 +66,46 @@ export default function App() {
         </button>
       </form>
 
-      {state.status === 'loading' && <p>Searching...</p>}
+      {state.status === 'loading' && (
+        <>
+          <p>Searching the regulations...</p>
+          {slow && <p>Waking up the server, the first request can take about 5 s.</p>}
+        </>
+      )}
       {state.status === 'error' && <p role="alert">Something went wrong. Please try again.</p>}
       {state.status === 'answer' && (
         <>
-          <p data-testid="answer" className="answer">
-            {state.reply.answer}
-          </p>
+          <div data-testid="answer" className="answer">
+            <Markdown>{state.reply.answer}</Markdown>
+          </div>
           {state.reply.sources.length > 0 && (
-            <section>
-              <h2>Sources</h2>
-              <ol>
-                {state.reply.sources.map((source) => (
-                  <li key={source.label}>
-                    <a href={source.url} target="_blank" rel="noopener">
-                      {source.label}
-                    </a>{' '}
-                    <span className="tier">{source.source_tier}</span>
-                  </li>
-                ))}
-              </ol>
-            </section>
+            <Sources sources={state.reply.sources} cited={citedNumbers(state.reply.answer)} />
           )}
         </>
       )}
     </main>
+  )
+}
+
+function Sources({ sources, cited }: { sources: Source[]; cited: Set<number> }) {
+  return (
+    <section className="sources">
+      <h2>Sources</h2>
+      <ol>
+        {sources.map((source, i) => (
+          <li key={source.label}>
+            <a href={source.url} target="_blank" rel="noopener">
+              {source.label}
+            </a>{' '}
+            <span className="tier">{source.source_tier}</span>{' '}
+            {cited.has(i + 1) ? (
+              <span className="citation cited">cited</span>
+            ) : (
+              <span className="citation">retrieved, not cited</span>
+            )}
+          </li>
+        ))}
+      </ol>
+    </section>
   )
 }

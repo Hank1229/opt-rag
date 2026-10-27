@@ -35,20 +35,16 @@ button {
   font: inherit;
 }
 
-.answer {
-  white-space: pre-wrap;
-}
-
 [role='alert'] {
   color: #b00020;
 }
 
-ol {
+.sources ol {
   list-style: none;
   padding: 0;
 }
 
-li {
+.sources li {
   margin-bottom: 6px;
 }
 
@@ -58,4 +54,14 @@ li {
   border-radius: 4px;
   background: #eceff3;
   color: #444;
+}
+
+.citation {
+  font-size: 0.75em;
+  color: #666;
+}
+
+.citation.cited {
+  font-weight: 600;
+  color: #0b6b2f;
 }
