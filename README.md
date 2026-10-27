@@ -143,7 +143,7 @@ The full runbook, including one-time setup and secrets, is in [deploy/README.md]
 
 Limitations:
 
-- The corpus is pinned to eCFR issue date 2026-09-14, the last version before the DHS Duration of Status rule's text entered the eCFR. That rule is enjoined; the 2026-10-01 snapshot carried its 30-day grace period, which conflicts with the 60 days on Study in the States ([DECISIONS.md](DECISIONS.md#2026-10-22-tier-1-re-pinned-to-ecfr-issue-date-2026-09-14)).
+- The corpus is pinned to eCFR issue date 2026-09-14, the last version before the DHS Duration of Status rule's text entered the eCFR. That rule is enjoined; the 2026-10-01 snapshot carried its 30-day grace period and OPT filing-window text, which conflicts with the 60 days on Study in the States ([DECISIONS.md](DECISIONS.md#2026-10-22-tier-1-re-pinned-to-ecfr-issue-date-2026-09-14)).
 - opt-rag wrongly refused 1 to 3 of 31 answerable questions per run (summary.md, line 27). These false refusals account for most of the correctness gap (DECISIONS.md).
 - The judge is not deterministic. It scored one identical answer 0.00 in one run and 1.00 in the other two (human_check.md).
 - Refusal is prompt-only. The API has no refused field, so the page shows a refusal as a normal answer.
