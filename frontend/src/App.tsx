@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import Markdown, { type Components } from 'react-markdown'
 import remarkBreaks from 'remark-breaks'
+import { Analytics } from '@vercel/analytics/react'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
@@ -63,36 +64,39 @@ export default function App() {
   }
 
   return (
-    <main>
-      <h1>F-1 / OPT questions</h1>
-      <form onSubmit={ask}>
-        <label htmlFor="question">Question</label>
-        <input id="question" value={question} onChange={(e) => setQuestion(e.target.value)} />
-        <button type="submit" disabled={!question.trim() || state.status === 'loading'}>
-          Ask
-        </button>
-      </form>
+    <>
+      <Analytics />
+      <main>
+        <h1>F-1 / OPT questions</h1>
+        <form onSubmit={ask}>
+          <label htmlFor="question">Question</label>
+          <input id="question" value={question} onChange={(e) => setQuestion(e.target.value)} />
+          <button type="submit" disabled={!question.trim() || state.status === 'loading'}>
+            Ask
+          </button>
+        </form>
 
-      {state.status === 'loading' && (
-        <>
-          <p>Searching the regulations...</p>
-          {state.waking && <p>Waking up the server, the first answer can take about 10 s.</p>}
-        </>
-      )}
-      {state.status === 'error' && <p role="alert">Something went wrong. Please try again.</p>}
-      {state.status === 'answer' && (
-        <>
-          <div data-testid="answer">
-            <Markdown remarkPlugins={[remarkBreaks]} components={answerComponents} disallowedElements={['img']}>
-              {state.reply.answer}
-            </Markdown>
-          </div>
-          {state.reply.sources.length > 0 && (
-            <Sources sources={state.reply.sources} cited={citedNumbers(state.reply.answer)} />
-          )}
-        </>
-      )}
-    </main>
+        {state.status === 'loading' && (
+          <>
+            <p>Searching the regulations...</p>
+            {state.waking && <p>Waking up the server, the first answer can take about 10 s.</p>}
+          </>
+        )}
+        {state.status === 'error' && <p role="alert">Something went wrong. Please try again.</p>}
+        {state.status === 'answer' && (
+          <>
+            <div data-testid="answer">
+              <Markdown remarkPlugins={[remarkBreaks]} components={answerComponents} disallowedElements={['img']}>
+                {state.reply.answer}
+              </Markdown>
+            </div>
+            {state.reply.sources.length > 0 && (
+              <Sources sources={state.reply.sources} cited={citedNumbers(state.reply.answer)} />
+            )}
+          </>
+        )}
+      </main>
+    </>
   )
 }
 
