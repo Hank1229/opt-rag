@@ -236,8 +236,11 @@ def generator_for(handler, sleeps=None):
     return GeminiGenerator("test-key-not-real", model="gemini-3.6-flash", temperature=0.0, client=client, sleep=sleep)
 
 
-def generation_reply(model_version, text="Answer [1]."):
-    return {"candidates": [{"content": {"parts": [{"text": text}]}}], "modelVersion": model_version}
+def generation_reply(model_version, text="Answer [1].", finish_reason="STOP"):
+    return {
+        "candidates": [{"content": {"parts": [{"text": text}]}, "finishReason": finish_reason}],
+        "modelVersion": model_version,
+    }
 
 
 # Extra (Claude): request carries the model, temperature, and key header; the answer text comes back.
@@ -433,6 +436,27 @@ def test_generation_gives_up_after_five_transport_errors():
         generator_for(down, sleeps).complete("prompt text")
     assert len(calls) == 5
     assert len(sleeps) == 4
+
+
+# Audit #4, expected result: Gemini replies finishReason=MAX_TOKENS -> GenerationError, and /query
+# answers with the error status GenerationError already gets (500), not 200 with half an answer.
+def test_cut_off_generation_is_an_error(offline_query):
+    def cut_off(request):
+        return httpx.Response(200, json=generation_reply("gemini-3.6-flash", text="Up to 90", finish_reason="MAX_TOKENS"))
+
+    with pytest.raises(GenerationError, match="MAX_TOKENS"):
+        generator_for(cut_off).complete("prompt text")
+
+    assert offline_query(generator_for(cut_off)).status_code == 500
+
+
+# Extra (Claude): a final reply always carries finishReason, so one without it is an error too.
+def test_extra_generation_without_finish_reason_is_an_error():
+    reply = generation_reply("gemini-3.6-flash")
+    del reply["candidates"][0]["finishReason"]
+
+    with pytest.raises(GenerationError, match="finishReason None"):
+        generator_for(lambda request: httpx.Response(200, json=reply)).complete("prompt text")
 
 
 # Extra (Claude): a read timeout may follow a billed generation, so it is not retried.

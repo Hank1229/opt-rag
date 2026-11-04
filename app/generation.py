@@ -77,6 +77,10 @@ class GeminiGenerator:
         candidates = reply.get("candidates") or [{}]
         if "content" not in candidates[0]:
             raise GenerationError(f"Gemini returned no answer: {json.dumps(reply)[:300]}")
+        finish_reason = candidates[0].get("finishReason")
+        if finish_reason != "STOP":
+            # A cut-off answer can lose its citations or the fixed disclaimer.
+            raise GenerationError(f"Gemini stopped early, finishReason {finish_reason}")
         return "".join(part["text"] for part in candidates[0]["content"]["parts"] if not part.get("thought"))
 
     def _post(self, body: dict) -> httpx.Response:
