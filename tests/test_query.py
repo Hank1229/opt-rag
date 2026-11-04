@@ -389,6 +389,18 @@ def offline_query(monkeypatch):
     api.app.dependency_overrides = {}
 
 
+# Audit #1, expected result (server side): RETRIEVAL_TOP_K=3 in .env -> /query retrieves with k=3,
+# the same app.main.top_k the eval reads (tests/test_eval.py).
+def test_query_takes_top_k_from_the_setting(offline_query, monkeypatch):
+    ks = []
+    monkeypatch.setattr(api, "retrieve", lambda question, k, conn, embedder: ks.append(k) or [hit("214.2(f)(10)", n=1)])
+    monkeypatch.delenv("RETRIEVAL_TOP_K", raising=False)
+    monkeypatch.setitem(api.ENV_FILE, "RETRIEVAL_TOP_K", "3")
+
+    assert offline_query(FakeGenerator()).status_code == 200
+    assert ks == [3]
+
+
 # Audit #2, expected result 1: the first generation POST raises httpx.TransportError (a connection
 # error: Hank chose to retry only those, 2026-11-03) and the second succeeds -> /query returns the normal answer, and the mock saw two calls.
 def test_generation_retries_a_transport_error(offline_query):

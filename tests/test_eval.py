@@ -756,7 +756,7 @@ class SettingsGenerator(FakeGenerator):
 
 
 def test_10e_5_temperature_and_top_k_in_prompts_json_and_every_row(tmp_path):
-    models = run_models(SettingsGenerator())
+    models = run_models(SettingsGenerator(), 5)
     assert (models["generation_temperature"], models["top_k"]) == (0.0, 5)
     run([item("Q1"), item("Q12", expected="refuse")], ["opt-rag", "bare"], 1, tmp_path,
         retrieve=lambda q: [hit("214.2(f)(10)")], generator=SettingsGenerator(), judge=FakeJudge(),
@@ -768,13 +768,55 @@ def test_10e_5_temperature_and_top_k_in_prompts_json_and_every_row(tmp_path):
 
 
 def test_10e_5_extra_resume_refuses_another_temperature(tmp_path):
-    models = run_models(SettingsGenerator())
+    models = run_models(SettingsGenerator(), 5)
     fake_run(tmp_path, [item("Q1")], arms=["bare"])
     (tmp_path / "prompts.json").write_text(json.dumps(json.loads((tmp_path / "prompts.json").read_text()) | {"models": models}))
     with pytest.raises(RuntimeError, match="models changed"):
         run([item("Q1")], ["bare"], 2, tmp_path, retrieve=None, generator=FakeGenerator(), judge=FakeJudge(),
             known=KNOWN, models=models | {"generation_temperature": 0.7}, limiter=NoWait(), git=GIT,
             gold_sha256=GOLD_SHA256)
+
+
+class ChunkTextsConn:
+    """Stands in for the local database: the one query run_eval makes returns KNOWN."""
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def execute(self, sql):
+        return self
+
+    def fetchall(self):
+        return list(KNOWN.items())
+
+
+# Audit fix 1, expected result: RETRIEVAL_TOP_K=3 in .env -> the eval retrieves with k=3 and
+# prompts.json records top_k 3, the value /query reads through app.main.top_k.
+def test_eval_takes_top_k_from_the_server_setting(tmp_path, monkeypatch):
+    from app import main as api
+
+    monkeypatch.delenv("RETRIEVAL_TOP_K", raising=False)
+    for name, value in {"RETRIEVAL_TOP_K": "3", "OPENAI_API_KEY": "test", "GEMINI_API_KEY": "test"}.items():
+        monkeypatch.setitem(api.ENV_FILE, name, value)
+    monkeypatch.setattr(api, "get_generator", SettingsGenerator)
+    monkeypatch.setattr(cli, "RESULTS", tmp_path)
+    monkeypatch.setattr(cli, "Judge", lambda key: FakeJudge())
+    monkeypatch.setattr(cli, "query_embedder", lambda key, cache: None)
+    monkeypatch.setattr(cli, "database_url", lambda target: "")
+    monkeypatch.setattr(cli, "connect", lambda url, autocommit: ChunkTextsConn())
+    monkeypatch.setattr(cli, "git_state", lambda: GIT)
+    ks = []
+    monkeypatch.setattr(cli, "retrieve", lambda question, k, conn, embedder: ks.append(k) or [hit("214.2(f)(10)")])
+
+    cli.main(["run", "--arm", "opt-rag", "--runs", "1", "--qids", "Q1", "--run-id", "k3"])
+
+    assert api.top_k() == 3
+    assert ks == [3]
+    assert json.loads((tmp_path / "k3" / "prompts.json").read_text())["models"]["top_k"] == 3
+    assert read_jsonl(tmp_path / "k3" / "raw.jsonl")[0]["top_k"] == 3
 
 
 # 6. A custom judge call stops when the served model does not start with JUDGE_MODEL.

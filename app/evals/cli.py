@@ -6,7 +6,7 @@ Usage:
   uv run --group eval python scripts/eval.py summary --run-id smoke
 
 Everything for a run lives in evals/results/<run_id>/: raw.jsonl, pairs.jsonl, failures.jsonl,
-prompts.json, reference_claims.jsonl, query_embeddings.jsonl and summary.md. Generation uses the same generator settings as /query.
+prompts.json, reference_claims.jsonl, query_embeddings.jsonl and summary.md. Generation and top-k use the same settings as /query.
 GEMINI_API_KEY and OPENAI_API_KEY come from the environment or .env and are never printed.
 A run stops before any API call unless evals/gold_v1.jsonl matches the sha256 frozen in evals/README.md.
 """
@@ -23,7 +23,6 @@ from app.db import connect
 from app.embedding import DIMENSIONS
 from app.embedding import MODEL as EMBEDDING_MODEL
 from app.evals.judge import JUDGE_MODEL, Judge
-from app.evals.metrics import TOP_K
 from app.evals.runner import ARMS, RateLimit, read_jsonl, run
 from app.evals.summary import summarize
 from app.gold import EVALS_README, GOLD, ROOT, read_drafts
@@ -79,12 +78,12 @@ def frozen_gold_sha256(gold: Path, readme: Path) -> str:
     return actual
 
 
-def run_models(generator) -> dict:
+def run_models(generator, top_k: int) -> dict:
     """Models and generation settings, written to prompts.json and every row."""
     return {
         "generation_model": generator.model,
         "generation_temperature": generator.temperature,
-        "top_k": TOP_K,
+        "top_k": top_k,
         "judge_model": JUDGE_MODEL,
         "embedding_model": f"{EMBEDDING_MODEL} ({DIMENSIONS} dims)",
     }
@@ -102,12 +101,13 @@ def select(items: list[dict], qids: list[str] | None, limit: int | None) -> list
 def run_eval(args: argparse.Namespace) -> None:
     gold_sha256 = frozen_gold_sha256(GOLD, EVALS_README)
     # Imported here so `summary` needs no API keys and no FastAPI app.
-    from app.main import get_generator, setting
+    from app.main import get_generator, setting, top_k
 
     out = RESULTS / args.run_id
     out.mkdir(parents=True, exist_ok=True)
     items = select(read_drafts(GOLD), args.qids, args.limit)
     generator = get_generator()
+    k = top_k()
     judge = Judge(setting("OPENAI_API_KEY"))
     embedder = query_embedder(setting("GEMINI_API_KEY"), cache=out / "query_embeddings.jsonl")
     with connect(database_url("local"), autocommit=True) as conn:
@@ -119,11 +119,11 @@ def run_eval(args: argparse.Namespace) -> None:
             list(ARMS) if args.arm == "both" else [args.arm],
             args.runs,
             out,
-            retrieve=lambda question: retrieve(question, TOP_K, conn=conn, embedder=embedder),
+            retrieve=lambda question: retrieve(question, k, conn=conn, embedder=embedder),
             generator=generator,
             judge=judge,
             known=known,
-            models=run_models(generator),
+            models=run_models(generator, k),
             limiter=RateLimit(GENERATION_CALLS_PER_MINUTE, 60),
             git=git_state(),
             gold_sha256=gold_sha256,

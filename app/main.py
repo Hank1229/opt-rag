@@ -24,6 +24,7 @@ from app.retrieval import Hit, query_embedder, retrieve
 
 ROOT = Path(__file__).resolve().parent.parent
 ENV_FILE = dotenv_values(ROOT / ".env")
+DEFAULT_TOP_K = "5"  # baseline, DECISIONS.md 2026-09-01
 
 app = FastAPI(title="opt-rag")
 
@@ -53,6 +54,11 @@ def setting(name: str, default: str | None = None) -> str:
     if not value:
         raise MissingSetting(f"{name} is not set")
     return value
+
+
+def top_k() -> int:
+    """Chunks retrieved per question; /query and the eval runner both read it here."""
+    return int(setting("RETRIEVAL_TOP_K", DEFAULT_TOP_K))
 
 
 def get_conn():
@@ -114,7 +120,7 @@ def query(
     embedder=Depends(get_embedder),
     generator=Depends(get_generator),
 ) -> QueryResponse:
-    chunks = retrieve(request.question, int(setting("RETRIEVAL_TOP_K", "5")), conn=conn, embedder=embedder)
+    chunks = retrieve(request.question, top_k(), conn=conn, embedder=embedder)
     if not chunks:
         # Nothing to cite: refuse without spending a generation call.
         return QueryResponse(answer=f"{REFUSAL}\n\n{DISCLAIMER}", sources=[])
