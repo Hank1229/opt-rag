@@ -1,4 +1,4 @@
-"""Step 09a gold set drafts: validation against the locally chunked corpus and review order.
+"""Step 09a gold set drafts: validation against the locally chunked corpus.
 
 Numbered tests map to Hank's step 09a expected results 2-5; result 1 is covered by
 tests/test_questions.py. "Step 09b re-pin 5" maps to step 09b part 2 expected result 5.
@@ -18,7 +18,6 @@ from app.gold import (
     draft_problems,
     read_drafts,
     read_questions,
-    review_order,
 )
 from app.ingest.chunking import read_manifest
 
@@ -84,12 +83,12 @@ def test_04_refuse_item_with_a_draft_fails(corpus):
 
 
 # 5. Edge: an "answer" item whose answer is not in the corpus -> marked NOT_IN_CORPUS with an
-# empty answer, listed first in the review sheet.
-def test_05_not_in_corpus_item_passes_and_is_reviewed_first(corpus):
+# empty answer. The "listed first in the review sheet" half went with review_order (dead code
+# once gold v1 froze; audit follow-up, DECISIONS.md 2026-11-03).
+def test_05_not_in_corpus_item_passes(corpus):
     found = draft("Q1")
     missing = draft("Q2", reference_answer=NOT_IN_CORPUS, citation_keys=(), source_quote="")
     assert draft_problems([found, missing], corpus) == []
-    assert review_order([found, missing]) == [missing, found]
 
 
 def test_extra_not_in_corpus_item_with_a_citation_fails(corpus):
@@ -147,12 +146,6 @@ def test_extra_quote_fragments_are_checked_one_by_one(corpus):
     assert draft_problems([draft(citation_keys=keys, source_quote=f"{QUOTE} [...] Made up.")], corpus) == [
         "Q1: source_quote not found in the cited text: 'Made up.'"
     ]
-
-
-def test_extra_review_order_keeps_file_order_and_leaves_out_refuse_items():
-    first, refuse, second = draft("Q1"), draft("Q2", "refuse"), draft("Q3")
-    missing = draft("Q4", reference_answer=NOT_IN_CORPUS)
-    assert review_order([first, refuse, second, missing]) == [missing, first, second]
 
 
 def test_extra_drafts_must_copy_question_fields_unchanged():

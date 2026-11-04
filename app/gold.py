@@ -109,9 +109,3 @@ def copy_problems(drafts: list[dict], questions: list[dict[str, str]], issue_dat
         if d["corpus_issue_date"] != issue_date:
             found.append(f"{q['qid']}: corpus_issue_date is not the manifest's {issue_date}")
     return found
-
-
-def review_order(drafts: list[dict]) -> list[dict]:
-    """Answer items for the review sheet: NOT_IN_CORPUS first, otherwise in file order."""
-    answers = [d for d in drafts if d["expected"] == "answer"]
-    return sorted(answers, key=lambda d: d["reference_answer"] != NOT_IN_CORPUS)
