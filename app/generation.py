@@ -15,6 +15,9 @@ from app.retrieval import Hit
 
 ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 RETRY_STATUSES = {429, 503}
+# Only errors where the request never reached Gemini: a read timeout or a dropped reply may
+# follow a billed generation, and five 180 s timeouts would outlast Cloud Run's request limit.
+RETRY_ERRORS = (httpx.ConnectError, httpx.ConnectTimeout)
 MAX_ATTEMPTS = 5
 REFUSAL = (
     "The provided sources do not contain the answer to this question. "
@@ -65,15 +68,7 @@ class GeminiGenerator:
             "contents": [{"role": "user", "parts": [{"text": prompt}]}],
             "generationConfig": {"temperature": self.temperature},
         }
-        slept = 0.0
-        for attempt in range(1, MAX_ATTEMPTS + 1):
-            response = self.client.post(ENDPOINT.format(model=self.model), json=body, headers=self.headers)
-            if response.status_code not in RETRY_STATUSES or attempt == MAX_ATTEMPTS:
-                break
-            try:
-                slept = wait_to_retry(attempt, response.text, self.sleep, slept)
-            except RetryDelayTooLong as exc:
-                raise GenerationError(str(exc)) from exc
+        response = self._post(body)
         if response.status_code != 200:
             raise GenerationError(f"Gemini generation failed, HTTP {response.status_code}: {response.text[:300]}")
         reply = response.json()
@@ -83,3 +78,25 @@ class GeminiGenerator:
         if "content" not in candidates[0]:
             raise GenerationError(f"Gemini returned no answer: {json.dumps(reply)[:300]}")
         return "".join(part["text"] for part in candidates[0]["content"]["parts"] if not part.get("thought"))
+
+    def _post(self, body: dict) -> httpx.Response:
+        """POST, retrying RETRY_ERRORS and RETRY_STATUSES; returns the last HTTP reply."""
+        slept = 0.0
+        for attempt in range(1, MAX_ATTEMPTS + 1):
+            try:
+                response = self.client.post(ENDPOINT.format(model=self.model), json=body, headers=self.headers)
+            except RETRY_ERRORS as exc:
+                if attempt == MAX_ATTEMPTS:
+                    raise GenerationError(
+                        f"Gemini generation failed after {attempt} attempts, {type(exc).__name__}: {exc}"
+                    ) from exc
+                retry_text = ""
+            else:
+                if response.status_code not in RETRY_STATUSES or attempt == MAX_ATTEMPTS:
+                    return response
+                retry_text = response.text
+            try:
+                slept = wait_to_retry(attempt, retry_text, self.sleep, slept)
+            except RetryDelayTooLong as exc:
+                raise GenerationError(str(exc)) from exc
+        raise AssertionError("unreachable")

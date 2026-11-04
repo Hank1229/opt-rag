@@ -372,6 +372,84 @@ def test_extra_generator_errors():
         generator_for(blocked).complete("prompt text")
 
 
+@pytest.fixture
+def offline_query(monkeypatch):
+    """POST /query with retrieval stubbed to one chunk, so only the given generator is real."""
+    monkeypatch.setattr(api, "retrieve", lambda question, k, conn, embedder: [hit("214.2(f)(10)", n=1)])
+
+    def post(generator):
+        api.app.dependency_overrides = {
+            api.get_conn: lambda: None,
+            api.get_embedder: lambda: None,
+            api.get_generator: lambda: generator,
+        }
+        return TestClient(api.app, raise_server_exceptions=False).post("/query", json={"question": QUESTION})
+
+    yield post
+    api.app.dependency_overrides = {}
+
+
+# Audit #2, expected result 1: the first generation POST raises httpx.TransportError (a connection
+# error: Hank chose to retry only those, 2026-11-03) and the second succeeds -> /query returns the normal answer, and the mock saw two calls.
+def test_generation_retries_a_transport_error(offline_query):
+    calls = []
+
+    def flaky(request):
+        calls.append(1)
+        if len(calls) == 1:
+            raise httpx.ConnectError("connection reset", request=request)
+        return httpx.Response(200, json=generation_reply("gemini-3.6-flash"))
+
+    response = offline_query(generator_for(flaky))
+
+    assert response.status_code == 200
+    assert response.json()["answer"] == "Answer [1]."
+    assert len(calls) == 2
+
+
+# Audit #2, expected result 2: TransportError on every attempt -> GenerationError after the
+# retry limit (five attempts), not an endless retry.
+def test_generation_gives_up_after_five_transport_errors():
+    calls = []
+    sleeps = []
+
+    def down(request):
+        calls.append(1)
+        raise httpx.ConnectError("connection refused", request=request)
+
+    with pytest.raises(GenerationError, match="ConnectError"):
+        generator_for(down, sleeps).complete("prompt text")
+    assert len(calls) == 5
+    assert len(sleeps) == 4
+
+
+# Extra (Claude): a read timeout may follow a billed generation, so it is not retried.
+def test_extra_generation_does_not_retry_a_read_timeout():
+    calls = []
+
+    def slow(request):
+        calls.append(1)
+        raise httpx.ReadTimeout("no reply", request=request)
+
+    with pytest.raises(httpx.ReadTimeout):
+        generator_for(slow).complete("prompt text")
+    assert len(calls) == 1
+
+
+# Extra (Claude): a transport error on the last attempt is the error reported, not an earlier 503.
+def test_extra_generation_reports_a_last_attempt_transport_error():
+    calls = []
+
+    def unavailable_then_down(request):
+        calls.append(1)
+        if len(calls) < 5:
+            return httpx.Response(503, text="high demand")
+        raise httpx.ConnectError("connection refused", request=request)
+
+    with pytest.raises(GenerationError, match="5 attempts, ConnectError"):
+        generator_for(unavailable_then_down).complete("prompt text")
+
+
 def gemini_key():
     return os.environ.get("GEMINI_API_KEY") or api.ENV_FILE.get("GEMINI_API_KEY")
 
