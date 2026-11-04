@@ -504,3 +504,23 @@ Cloud Run is $0 at this traffic under the Always Free tier, scales to zero, and 
 **Rejected alternatives**: a `cited` field on /query (changes the API contract mid-step; the eval already parses [n]); showing only cited sources (refusals would show no sources at all); a keep-warm cron (costs money on a $10 project); a 3 s timer for the wake-up line (see Caught); stripping markdown with a regex; changing the generation prompt to drop markdown (would change the system baseline-v1 measured); install-first README order (buries the numbers).
 **Rationale**: An interviewer should see what the system is, the honest numbers, and the architecture within 30 seconds. Every number in the README names its source file so it can be checked. Raw HTML from the model is never rendered, and the cold start is explained before anyone waits through it.
 **Caught**: code review found the 3 s wake-up timer would fire on every request because a warm /query already takes 4-5 s (Gemini generation); replaced the timer with the /health pre-warm signal. The same review found the frontend regex rejected `[1, 3]` while the eval accepted it; the frontend now copies LABEL from metrics.py.
+
+### 2026-11-03 — Code audit follow-up (plan C)
+
+Decision: Run a reduced-scope cleanup after the ponytail-review audit. Order: protect and confirm (Supabase plan, CLAUDE.md offline-tests rule, CI workflow, graphify-out consistency) → small deletions → three bug fixes (generation retry on TransportError, finishReason check, single source for top-k with k recorded in eval metadata) → structural refactor of summary.py and embedding.py only; runner.py, ingest/cli.py, chunking.py get naming and header comments only, verified by byte-identical summary output / chunk report and a golden test tied to baseline-v1's prompt hash. Supabase keepalive via a GitHub Actions schedule running SELECT 1 through the session pooler. DB-dependent tests get @pytest.mark.db; CI deselects them, local `pytest` unchanged. /code-review once per phase. App.tsx and JSONL helper merge deferred.
+
+Rejected alternatives: full four-phase refactor including runner.py and chunking.py restructuring (risk of invalidating frozen baseline-v1 and gold citations, 2-3 sessions during active job search); Cloud Scheduler hitting /query for keepalive (burns Gemini quota); top-k consistency check instead of a single source (keeps two config paths); excluding db tests by default in pytest config (conflicts with 2026-10-27 decision that full suite resets local DB).
+
+Rationale: Demo reliability and v2 experiment validity are worth fixing now; readability of the two low-risk files feeds the pending 08 walkthrough; the two highest-risk files are explained at design level in interviews, so structural debt there costs reading time, not interview answers. Restructure chunking.py only when chunk logic changes in v2 and embeddings must be redone anyway.
+
+### 2026-11-03 — Generation retry scope and the db test marker
+
+Decision: GeminiGenerator retries only httpx.ConnectError and ConnectTimeout (the request never reached Gemini), up to MAX_ATTEMPTS through wait_to_retry; read timeouts and dropped replies raise at once. DB-dependent tests get the db marker from a tests/conftest.py hook (every test using the env fixture), not per-test decorators. CI runs `pytest -m "not db and not live" --ignore=tests/smoke` and checks that app.main imports without the dev and eval groups.
+
+Rejected alternatives: retrying every httpx.TransportError like GeminiEmbedder (ReadTimeout at the 180 s client timeout x 5 attempts is ~15 min, past Cloud Run's 300 s limit, and a re-sent generateContent may be billed twice); retrying all but timeouts (ReadError after the request was sent still re-bills); hand-written @pytest.mark.db (a new DB test that forgets it breaks CI).
+
+Rationale: Retrying is only safe when the request cannot have run. The marker follows the one fixture every DB test already uses.
+
+Caught: code review found TransportError covers ReadTimeout, so the first version could hold one /query for ~15 minutes; narrowed to connection errors. Review also found the -k lists left 16 offline tests (CORS, questions CSV, startup) out of CI; the marker brings them in.
+
+Backlog (before any v2 top-k eval run): (1) runner.run() records a GenerationError as a failed item and continues, instead of aborting the run — otherwise an item that deterministically ends with MAX_TOKENS or RECITATION blocks every resume; (2) hit_at_5 / MRR cutoff follow the configured k instead of the hardcoded 5 (bumps METRIC_VERSION); (3) verify the keepalive SELECT 1 counts as Supabase activity over one 7-day cycle, else switch to a REST API ping.
