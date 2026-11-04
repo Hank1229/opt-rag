@@ -1,0 +1,22 @@
+# Keeps OPT-RAG (Supabase Free plan) from pausing after 7 idle days: SELECT 1 every 3 days.
+# Not /query: that would spend a Gemini call each time. The secret must be the Session pooler
+# connection string; GitHub runners cannot reach the IPv6-only direct connection.
+# GitHub disables schedules after 60 days without repo activity: check Actions before sharing the demo.
+name: supabase-keepalive
+on:
+  schedule:
+    - cron: "23 14 */3 * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: SELECT 1
+        run: psql "$DATABASE_URL" -c "select 1"
+        env:
+          DATABASE_URL: ${{ secrets.OPT_RAG_DATABASE_URL }}
+          PGCONNECT_TIMEOUT: "10"
