@@ -53,10 +53,11 @@ Ragas + React + Vite + TypeScript frontend. Deploy: Google Cloud Run + Vercel.
   "Cloud mode for test 8 retired"). Exception: tests/smoke/ hits the
   deployed service (and through it OPT-RAG and Gemini) when
   SMOKE_BASE_URL is set; unset, it skips. Hank sets it, not Claude.
-- Refactor sessions run only offline tests by default: the pytest
-  steps in .github/workflows/offline-tests.yml, plus `npm test` in
-  frontend/ when frontend/src changes. Ask Hank before running any test
-  that needs local Supabase or a live API: the first database test runs
+- Refactor sessions run only offline tests by default:
+  `uv run --locked --group dev --group eval pytest -m "not db and not live" --ignore=tests/smoke`
+  (as CI does), plus `npm test` in frontend/ when frontend/src changes.
+  Ask Hank before running any test that needs local Supabase or a live
+  API: the first database test runs
   `supabase db reset`, which wipes the locally ingested corpus, and
   `-m live` tests skip the reset but call Gemini and eCFR.
 - After each step, report:

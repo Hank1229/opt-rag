@@ -4,13 +4,10 @@ import hashlib
 import itertools
 import math
 
+from app.db import vector_literal
+
 EMBEDDING_DIMS = 768
 _source_ids = itertools.count(1)
-
-
-def vector_literal(values) -> str:
-    """Format floats as pgvector text input, e.g. '[0.1,0.2]'."""
-    return "[" + ",".join(repr(float(v)) for v in values) + "]"
 
 
 def unit_vector(position: int, dims: int = EMBEDDING_DIMS) -> list[float]:

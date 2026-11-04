@@ -25,13 +25,11 @@ jobs:
           chmod +x "$RUNNER_TEMP/fakebin/supabase"
           echo "$RUNNER_TEMP/fakebin" >> "$GITHUB_PATH"
 
-      - name: Eval, embedding, corpus, gold
-        run: uv run --locked --group dev --group eval pytest tests/test_eval.py tests/test_embedding.py tests/test_corpus.py tests/test_gold.py tests/test_gold_v1.py
+      # The Docker image installs no dev or eval group, so the API must import without them.
+      - name: API imports without dev and eval groups
+        run: uv run --locked --no-dev python -c "import app.main"
 
-      - name: Query (offline subset)
-        run: uv run --locked --group dev pytest tests/test_query.py -k "generator or build_prompt or source_urls"
-
-      - name: Ingest (offline subset)
-        run: >
-          uv run --locked --group dev pytest tests/test_ingest.py
-          -k "check_chunks_names or manifest_ids or ecfr_keys_follow or faq_questions_are_separate or fallback_split or h4_h5 or faq_page_is_only or anchor_only_intro"
+      # db tests are marked in tests/conftest.py; this -m replaces the addopts one, so it repeats "not live".
+      # tests/smoke/ calls the deployed service whenever SMOKE_BASE_URL is set.
+      - name: Offline tests
+        run: uv run --locked --group dev --group eval pytest -m "not db and not live" --ignore=tests/smoke

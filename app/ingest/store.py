@@ -6,6 +6,7 @@ old document or the new one, never a mix and never zero chunks.
 
 import psycopg
 
+from app.db import vector_literal
 from app.ingest.chunking import Document
 
 UPSERT_DOCUMENT = """
@@ -22,10 +23,6 @@ INSERT_CHUNK = """
     insert into chunks (document_id, citation_key, chunk_index, content, embedding)
     values (%s, %s, %s, %s, %s::extensions.vector)
 """
-
-
-def vector_literal(values: list[float]) -> str:
-    return "[" + ",".join(repr(float(v)) for v in values) + "]"
 
 
 def write_document(conn: psycopg.Connection, doc: Document, vectors: list[list[float]]) -> None:

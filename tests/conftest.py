@@ -33,6 +33,14 @@ def pytest_addoption(parser):
     parser.addoption("--target", choices=TARGETS, default="local")
 
 
+def pytest_collection_modifyitems(items):
+    # Every test that reaches local Supabase goes through the env fixture, so CI can deselect
+    # them with `-m "not db and not live"` without a hand-kept list.
+    for item in items:
+        if "env" in item.fixturenames:
+            item.add_marker(pytest.mark.db)
+
+
 def pytest_configure(config):
     if config.getoption("--target") == "opt-rag":
         pytest.exit(

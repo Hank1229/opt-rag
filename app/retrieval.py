@@ -5,8 +5,8 @@ from pathlib import Path
 
 import psycopg
 
+from app.db import vector_literal
 from app.embedding import GeminiEmbedder
-from app.ingest.store import vector_literal
 
 SEARCH = """
     select c.id, c.citation_key, d.title, d.source_tier, d.url, c.content,

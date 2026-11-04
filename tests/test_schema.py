@@ -8,13 +8,13 @@ import httpx
 import pytest
 from psycopg import errors
 
+from app.db import vector_literal
 from helpers import (
     EMBEDDING_DIMS,
     chunk_count,
     insert_chunk,
     insert_document,
     unit_vector,
-    vector_literal,
 )
 
 
