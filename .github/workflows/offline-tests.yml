@@ -1,0 +1,37 @@
+# Offline tests on every push and PR: no API keys, no database, no Gemini or OpenAI calls.
+name: offline-tests
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.9"
+
+      # Any accidental supabase call fails instead of touching a database.
+      - name: Block supabase CLI
+        run: |
+          mkdir -p "$RUNNER_TEMP/fakebin"
+          printf '#!/bin/sh\necho "supabase is blocked in CI" >&2\nexit 1\n' > "$RUNNER_TEMP/fakebin/supabase"
+          chmod +x "$RUNNER_TEMP/fakebin/supabase"
+          echo "$RUNNER_TEMP/fakebin" >> "$GITHUB_PATH"
+
+      - name: Eval, embedding, corpus, gold
+        run: uv run --locked --group dev --group eval pytest tests/test_eval.py tests/test_embedding.py tests/test_corpus.py tests/test_gold.py tests/test_gold_v1.py
+
+      - name: Query (offline subset)
+        run: uv run --locked --group dev pytest tests/test_query.py -k "generator or build_prompt or source_urls"
+
+      - name: Ingest (offline subset)
+        run: >
+          uv run --locked --group dev pytest tests/test_ingest.py
+          -k "check_chunks_names or manifest_ids or ecfr_keys_follow or faq_questions_are_separate or fallback_split or h4_h5 or faq_page_is_only or anchor_only_intro"

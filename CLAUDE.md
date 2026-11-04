@@ -53,6 +53,12 @@ Ragas + React + Vite + TypeScript frontend. Deploy: Google Cloud Run + Vercel.
   "Cloud mode for test 8 retired"). Exception: tests/smoke/ hits the
   deployed service (and through it OPT-RAG and Gemini) when
   SMOKE_BASE_URL is set; unset, it skips. Hank sets it, not Claude.
+- Refactor sessions run only offline tests by default: the pytest
+  steps in .github/workflows/offline-tests.yml, plus `npm test` in
+  frontend/ when frontend/src changes. Ask Hank before running any test
+  that needs local Supabase or a live API: the first database test runs
+  `supabase db reset`, which wipes the locally ingested corpus, and
+  `-m live` tests skip the reset but call Gemini and eCFR.
 - After each step, report:
   1. files changed and the diff
   2. the exact command Hank should run to check it himself, and what
@@ -127,4 +133,4 @@ Rules:
 - If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
 - After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost; `update` rejects a `--code-only` flag because it never extracts docs). Any full rebuild must be code-only: `graphify extract . --code-only`. Never extract documents into the graph.
-- A committed graphify-out/graph.json is rewritten whole on every build, so a large diff to it in a pull request is expected. Do not flag it as churn or suggest skipping the graph rebuild or its hooks.
+- graphify-out/ is local only: it is gitignored and never committed, so a fresh clone (CI, a cloud session) has no graph and the rules above do not apply there. Do not suggest skipping the graph rebuild or its hooks.
