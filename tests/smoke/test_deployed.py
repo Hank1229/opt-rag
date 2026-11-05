@@ -37,7 +37,7 @@ def gold_question(qid: str) -> str:
 
 @pytest.fixture(scope="module")
 def client():
-    # Embedding and generation may each sleep up to 120 s on retries (app/embedding.py).
+    # Embedding and generation may each sleep up to 120 s on retries (app/retry.py).
     with httpx.Client(base_url=BASE_URL, timeout=300) as client:
         yield client
 

@@ -10,7 +10,7 @@ import time
 
 import httpx
 
-from app.embedding import RetryDelayTooLong, wait_to_retry
+from app.retry import RetryDelayTooLong, wait_to_retry
 from app.retrieval import Hit
 
 ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"

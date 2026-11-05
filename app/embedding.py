@@ -1,5 +1,6 @@
 """Gemini embeddings over the REST API: batched, retried on 429/5xx, L2-normalized,
 optionally cached in a local JSONL file so a rerun of ingest re-embeds nothing.
+The wait between retries lives in app/retry.py, shared with generation.
 
 Model, size, and task type are locked: CLAUDE.md "Embedding" and DECISIONS.md,
 Step 07 "Embedding model and task types". The API key goes in a request header,
@@ -11,12 +12,12 @@ import json
 import logging
 import math
 import os
-import random
-import re
 import time
 from pathlib import Path
 
 import httpx
+
+from app.retry import RetryDelayTooLong, wait_to_retry
 
 MODEL = "gemini-embedding-001"
 DIMENSIONS = 768
@@ -24,9 +25,6 @@ BATCH_SIZE = 100  # API limit per batchEmbedContents request
 ENDPOINT = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:batchEmbedContents"
 RETRY_STATUSES = {429, 500, 502, 503, 504}
 MAX_ATTEMPTS = 5
-MAX_BACKOFF_SECONDS = 60
-MAX_TOTAL_SLEEP_SECONDS = 120  # per request, across all retries
-RETRY_DELAY_RE = re.compile(r'"retryDelay":\s*"(\d+(?:\.\d+)?)s"')
 
 log = logging.getLogger(__name__)
 
@@ -35,11 +33,9 @@ class EmbeddingError(RuntimeError):
     pass
 
 
-class RetryDelayTooLong(RuntimeError):
-    pass
-
-
 class GeminiEmbedder:
+    """Embeds texts with one task type; `cache` is the JSONL path, `cached` its vectors by key."""
+
     def __init__(
         self,
         api_key: str,
@@ -92,6 +88,7 @@ class GeminiEmbedder:
         return [normalize(e["values"]) for e in embeddings]
 
     def _post(self, body: dict) -> httpx.Response:
+        """POST, retrying transport errors and RETRY_STATUSES; any other failure raises EmbeddingError."""
         slept = 0.0
         for attempt in range(1, MAX_ATTEMPTS + 1):
             try:
@@ -106,27 +103,15 @@ class GeminiEmbedder:
                     raise EmbeddingError(f"Gemini embedding request failed, {problem}")
             if attempt == MAX_ATTEMPTS:
                 raise EmbeddingError(f"Gemini embedding request failed after {attempt} attempts, {problem}")
-            try:
-                slept = wait_to_retry(attempt, reply, self.sleep, slept)
-            except RetryDelayTooLong as exc:
-                raise EmbeddingError(str(exc)) from exc
+            slept = self._wait(attempt, reply, slept)
         raise AssertionError("unreachable")
 
-
-def wait_to_retry(attempt: int, reply: str, sleep, slept: float) -> float:
-    """Sleep before the next attempt and return the request's new total slept: Gemini's retryDelay
-    hint plus 1 s if the reply has one, else backoff. Raises instead of sleeping when the wait would
-    exceed 61 s (a daily quota) or push the total past 120 s: no retry would succeed in time."""
-    hint = RETRY_DELAY_RE.search(reply)
-    delay = float(hint.group(1)) + 1 if hint else backoff_seconds(attempt)
-    if hint and delay > MAX_BACKOFF_SECONDS + 1:
-        raise RetryDelayTooLong(f"Gemini asked to retry in {delay - 1:g} s, a wait over the {MAX_BACKOFF_SECONDS + 1} s limit: {reply[:300]}")
-    if slept + delay > MAX_TOTAL_SLEEP_SECONDS:
-        raise RetryDelayTooLong(
-            f"retrying in {delay:g} s would bring the wait to {slept + delay:g} s, past the {MAX_TOTAL_SLEEP_SECONDS} s total: {reply[:300]}"
-        )
-    sleep(delay)
-    return slept + delay
+    def _wait(self, attempt: int, reply: str, slept: float) -> float:
+        """wait_to_retry, with a too-long wait reported as this module's EmbeddingError."""
+        try:
+            return wait_to_retry(attempt, reply, self.sleep, slept)
+        except RetryDelayTooLong as exc:
+            raise EmbeddingError(str(exc)) from exc
 
 
 def load_cache(path: Path) -> dict[str, list[float]]:
@@ -151,6 +136,7 @@ def load_cache(path: Path) -> dict[str, list[float]]:
 
 
 def append_cache(path: Path, vectors: dict[str, list[float]]) -> None:
+    """Append vectors by key to the JSONL cache, one entry per line."""
     path.parent.mkdir(parents=True, exist_ok=True)
     entries = "".join(json.dumps({"sha256": key, "values": values}) + "\n" for key, values in vectors.items())
     with path.open("ab+") as out:
@@ -161,11 +147,6 @@ def append_cache(path: Path, vectors: dict[str, list[float]]) -> None:
             if out.read(1) != b"\n":
                 out.write(b"\n")
         out.write(entries.encode())
-
-
-def backoff_seconds(attempt: int) -> float:
-    """Exponential backoff with jitter: about 2, 4, 8, 16, 32, then capped at 60 seconds."""
-    return min(MAX_BACKOFF_SECONDS, 2**attempt) + random.uniform(0, 1)
 
 
 def normalize(values: list[float]) -> list[float]:

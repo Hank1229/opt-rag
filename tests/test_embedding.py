@@ -19,10 +19,9 @@ from app.embedding import (
     MODEL,
     EmbeddingError,
     GeminiEmbedder,
-    RetryDelayTooLong,
-    wait_to_retry,
 )
 from app.ingest.chunking import Chunk
+from app.retry import RetryDelayTooLong, wait_to_retry
 
 FAKE_KEY = "test-key-not-real"
 

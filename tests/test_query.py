@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 
 from app import main as api
 from app.db import connect
-from app.embedding import RetryDelayTooLong, wait_to_retry
+from app.retry import RetryDelayTooLong, wait_to_retry
 from app.generation import DISCLAIMER, REFUSAL, GeminiGenerator, GenerationError, build_prompt
 from app.retrieval import Hit, query_embedder, retrieve
 from helpers import EMBEDDING_DIMS, insert_chunk, insert_document, unit_vector
