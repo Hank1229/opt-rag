@@ -750,6 +750,30 @@ def test_10e_4_extra_bare_prompt_sent_matches_the_hashed_template(tmp_path):
     assert generator.prompts == [arm_prompts("bare")["template"].replace("<question>", "Question Q1?")]
 
 
+# Refactor phase 3 golden test (Hank's acceptance for runner.py): the prompts the code renders
+# today are the ones baseline-v1 recorded, so baseline-v1 can still be resumed. The hashes are
+# copied from evals/results/baseline-v1/prompts.json.
+BASELINE_V1_PROMPT_SHA256 = {
+    "opt-rag": "0eabad844c697bc810f808c6d9c96cfaaa8d3948e23a9c0c0a26e596887655c1",
+    "bare": "69bc062c1652c1a99026086e3fd15f6d64398a789260911851ea139786c1bfba",
+}
+
+
+@pytest.mark.parametrize("arm", list(BASELINE_V1_PROMPT_SHA256))
+def test_arm_prompts_match_baseline_v1(arm):
+    recorded = json.loads((cli.RESULTS / "baseline-v1" / "prompts.json").read_text(encoding="utf-8"))[arm]
+    assert recorded["sha256"] == BASELINE_V1_PROMPT_SHA256[arm]
+    # Whole-dict equality is what record_provenance checks on resume.
+    assert arm_prompts(arm) == recorded
+
+
+# Extra (Claude): every baseline-v1 raw row carries its arm's current prompt hash.
+def test_extra_baseline_v1_rows_carry_the_current_prompt_hash():
+    rows = read_jsonl(cli.RESULTS / "baseline-v1" / "raw.jsonl")
+    assert rows
+    assert {(r["arm"], r["prompt_sha256"]) for r in rows} == set(BASELINE_V1_PROMPT_SHA256.items())
+
+
 # 5. Generation temperature and top_k go to prompts.json and every row.
 class SettingsGenerator(FakeGenerator):
     model, temperature = "gemini-test", 0.0
