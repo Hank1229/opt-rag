@@ -534,3 +534,15 @@ Rejected alternatives: adding a "partial" refusal class (a third class on a 41-i
 Rationale: Two failures in opposite directions under the same prompt (Q23 under-answers, Q12 over-answers by the old label) show the step 08 "prompt-only refusal, no distance threshold" boundary is fuzzy by design; that is the system's known weakest point and the v2 experiments test both sides of it. The glossary fix targets the vocabulary gap the two-tier design exists to bridge, so it is a class fix, not a one-question patch. It is test-informed; the glossary is built from corpus vocabulary rather than from failed questions, and this is stated openly.
 
 Caught: Tier 2 chunking emits an anchor sub-section chunk (180 chars) whose text is already inside its parent heading-block chunk, so one sentence can occupy two of the five retrieval slots. Also: Claude Code's chunk lookup confirmed .env DATABASE_URL points at cloud OPT-RAG, not local Supabase; read-only transaction, no writes.
+
+Caught: code review found the regex rename of models/scored in runner.py had also rewritten the freshly written file header and swallowed a blank line; fixed in e759d25. Rename-by-regex needs a header re-read before commit.
+
+### 2026-11-04 — Retry wait moves to app/retry.py
+
+Decision: wait_to_retry, RetryDelayTooLong and backoff_seconds move from app/embedding.py to app/retry.py, unchanged. GeminiEmbedder and GeminiGenerator import them from there and keep their own retry scopes (embedder: every TransportError and 429/5xx; generator: connection errors and 429/503).
+
+Rejected alternatives: one shared POST-with-retry helper for both classes (the two retry scopes differ on purpose; a shared loop would need a parameter for each difference); leaving the helper in app/embedding.py (generation imported the embedder module only for its retry wait).
+
+Rationale: The helper is shared, so it gets its own module. Code and behavior are unchanged; the Step 07 entry's "wait_to_retry in app/embedding.py" now reads app/retry.py.
+
+Caught: code review found the regex rename of models/scored in runner.py had also rewritten the freshly written file header and swallowed a blank line; fixed in e759d25. Rename-by-regex needs a header re-read before commit.
