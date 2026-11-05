@@ -1,7 +1,7 @@
 """Eval runner: answer each gold item per arm and run, score it, append it to raw.jsonl.
 
 Resume:
-- One line per (arm, run, qid) is written as soon as the item is scores; a restart skips
+- One line per (arm, run, qid) is written as soon as the item is scored; a restart skips
   lines already present.
 - The first failure goes to failures.jsonl and is re-raised, so a run never continues past
   an error it did not expect.
@@ -12,9 +12,9 @@ Prompts and provenance:
   the /query prompt.
 - Each arm's prompt hash covers its rendered prompt template (placeholder question and one
   source per tier, so both label formats count) and both judge prompts.
-- prompts.json holds those texts and hashes, the run_settings and generation settings, the gold
+- prompts.json holds those texts and hashes, the models and generation settings, the gold
   file hash, and the git state of each invocation. Each row carries its arm's prompt hash
-  and the run_settings and settings.
+  and the models and settings.
 
 Shared across rows:
 - Pair stability is judged once both members of a pair exist for an (arm, run) and goes to
@@ -22,6 +22,7 @@ Shared across rows:
 - Each gold reference is decomposed into claims once per qid and reference text, cached in
   reference_claims.jsonl, and shared by both arms and all runs.
 """
+
 import hashlib
 import json
 import logging
@@ -174,6 +175,7 @@ def record_provenance(out: Path, arms: list[str], git: dict, run_settings: dict,
     states = prompts.setdefault("git", [])
     if not states or states[-1] != git:
         states.append(git)
+    # The key stays "models": baseline-v1's prompts.json has it, and resume compares by key.
     for key, current in (("gold_sha256", gold_sha256), ("models", run_settings)):
         if prompts.setdefault(key, current) != current:
             raise RuntimeError(f"{key} changed since run id {out.name} started; use a new run id")

@@ -111,8 +111,8 @@ def run_eval(args: argparse.Namespace) -> None:
     judge = Judge(setting("OPENAI_API_KEY"))
     embedder = query_embedder(setting("GEMINI_API_KEY"), cache=out / "query_embeddings.jsonl")
     with connect(database_url("local"), autocommit=True) as conn:
-        known = dict(conn.execute(CHUNK_TEXTS).fetchall())
-        if not known:
+        chunk_texts = dict(conn.execute(CHUNK_TEXTS).fetchall())
+        if not chunk_texts:
             raise SystemExit("the local chunks table is empty; run scripts/ingest.py first")
         run(
             items,
@@ -122,7 +122,7 @@ def run_eval(args: argparse.Namespace) -> None:
             retrieve=lambda question: retrieve(question, k, conn=conn, embedder=embedder),
             generator=generator,
             judge=judge,
-            chunk_texts=known,
+            chunk_texts=chunk_texts,
             run_settings=run_models(generator, k),
             limiter=RateLimit(GENERATION_CALLS_PER_MINUTE, 60),
             git=git_state(),
