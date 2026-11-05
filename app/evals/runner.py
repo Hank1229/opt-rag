@@ -1,20 +1,27 @@
 """Eval runner: answer each gold item per arm and run, score it, append it to raw.jsonl.
 
-One line per (arm, run, qid) is written as soon as the item is scored, and a restart skips
-lines already present. Pair stability is judged once both members of a pair exist for an
-(arm, run) and goes to pairs.jsonl. The first failure is written to failures.jsonl and
-re-raised, so a run never continues past an error it did not expect.
+Resume:
+- One line per (arm, run, qid) is written as soon as the item is scores; a restart skips
+  lines already present.
+- The first failure goes to failures.jsonl and is re-raised, so a run never continues past
+  an error it did not expect.
+- A run id is never resumed under another prompt, model setting, gold hash or metric_version.
 
-The bare arm has its own prompt (no sources, answers from model knowledge); opt-rag uses the
-/query prompt. Each arm's prompt hash covers its rendered prompt template (placeholder question
-and one source per tier, so both label formats count) and both judge prompts. prompts.json holds
-those texts and hashes, the models and generation settings, the gold file hash, and the git state
-of each invocation; each row carries its arm's prompt hash and the models and settings. A run id
-is never resumed under another prompt, model setting, gold hash or metric_version. Each gold
-reference is decomposed into claims once per qid and reference text, cached in
-reference_claims.jsonl, and shared by both arms and all runs.
+Prompts and provenance:
+- The bare arm has its own prompt (no sources, answers from model knowledge); opt-rag uses
+  the /query prompt.
+- Each arm's prompt hash covers its rendered prompt template (placeholder question and one
+  source per tier, so both label formats count) and both judge prompts.
+- prompts.json holds those texts and hashes, the run_settings and generation settings, the gold
+  file hash, and the git state of each invocation. Each row carries its arm's prompt hash
+  and the run_settings and settings.
+
+Shared across rows:
+- Pair stability is judged once both members of a pair exist for an (arm, run) and goes to
+  pairs.jsonl.
+- Each gold reference is decomposed into claims once per qid and reference text, cached in
+  reference_claims.jsonl, and shared by both arms and all runs.
 """
-
 import hashlib
 import json
 import logging
@@ -108,7 +115,7 @@ def now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
 
 
-def score(item: dict, arm: str, answer: str, hits: list, *, known: dict[str, str], judge, claims: list[str] | None) -> dict:
+def score(item: dict, arm: str, answer: str, hits: list, *, chunk_texts: dict[str, str], judge, claims: list[str] | None) -> dict:
     """Judge outputs and metric values for one answer. Refuse items get the refusal judge only.
     Ragas sees the answer without the disclaimer; the refusal judge sees it whole."""
     refusal = judge.refusal(item["question"], answer)
@@ -117,30 +124,30 @@ def score(item: dict, arm: str, answer: str, hits: list, *, known: dict[str, str
     else:
         cited = bare_citations(answer)
     stripped, disclaimer_stripped = strip_disclaimer(answer)
-    scored = {
+    scores = {
         "cited_keys": cited,
-        "unknown_keys": unknown_keys(cited, known),
+        "unknown_keys": unknown_keys(cited, chunk_texts),
         "disclaimer_stripped": disclaimer_stripped,
         "judge": {"refusal": refusal},
         "metrics": {"refused": refusal["refused"], "refusal_verdict": refusal["verdict"]},
     }
     if item["expected"] == "refuse":
-        return scored
+        return scores
 
     gold, reference = item["citation_keys"], item["reference_answer"]
-    metrics = scored["metrics"]
+    metrics = scores["metrics"]
     if arm == "opt-rag":
         retrieved = [h.citation_key for h in hits]
         contexts = [h.content for h in hits]
         metrics["hit_at_5"] = hit_at_k(retrieved, gold)
         metrics["mrr"] = reciprocal_rank(retrieved, gold)
         metrics["faithfulness"] = judge.faithfulness(item["question"], stripped, contexts)
-        metrics["context_recall"] = judge.context_recall(item["question"], contexts, reference, [known[k] for k in gold])
+        metrics["context_recall"] = judge.context_recall(item["question"], contexts, reference, [chunk_texts[k] for k in gold])
     metrics["citation_accuracy"] = citation_accuracy(cited, gold)
     correctness = judge.answer_correctness(stripped, claims)
     metrics["answer_correctness"] = correctness["score"]
-    scored["judge"]["answer_correctness"] = {"reference_claims": claims, "verdicts": correctness["verdicts"]}
-    return scored
+    scores["judge"]["answer_correctness"] = {"reference_claims": claims, "verdicts": correctness["verdicts"]}
+    return scores
 
 
 def sha256(text: str) -> str:
@@ -158,7 +165,7 @@ def arm_prompts(arm: str) -> dict:
     return {"sha256": sha256(json.dumps(texts, sort_keys=True)), **texts}
 
 
-def record_provenance(out: Path, arms: list[str], git: dict, models: dict, gold_sha256: str) -> None:
+def record_provenance(out: Path, arms: list[str], git: dict, run_settings: dict, gold_sha256: str) -> None:
     """Write each arm's prompts, the models and settings, the gold hash and the git state to
     prompts.json; a resumed run id must not change any but the git state. A git state different
     from the last one recorded is appended."""
@@ -167,7 +174,7 @@ def record_provenance(out: Path, arms: list[str], git: dict, models: dict, gold_
     states = prompts.setdefault("git", [])
     if not states or states[-1] != git:
         states.append(git)
-    for key, current in (("gold_sha256", gold_sha256), ("models", models)):
+    for key, current in (("gold_sha256", gold_sha256), ("models", run_settings)):
         if prompts.setdefault(key, current) != current:
             raise RuntimeError(f"{key} changed since run id {out.name} started; use a new run id")
     for arm in arms:
@@ -201,7 +208,7 @@ def answer_item(item: dict, arm: str, *, retrieve, generator, limiter) -> tuple[
     return generate(item["question"], hits, generator=generator), hits
 
 
-def judge_pairs(items: list[dict], arm: str, run_no: int, rows: dict, out: Path, judge, models: dict) -> None:
+def judge_pairs(items: list[dict], arm: str, run_no: int, rows: dict, out: Path, judge, run_settings: dict) -> None:
     """Pair stability for every pair whose two answers exist in this (arm, run) and is not judged yet."""
     judged = {(p["arm"], p["run"], p["pair_id"]) for p in read_jsonl(out / "pairs.jsonl")}
     for pair_id in sorted({i["pair_id"] for i in items if i["pair_id"]}):
@@ -216,7 +223,7 @@ def judge_pairs(items: list[dict], arm: str, run_no: int, rows: dict, out: Path,
             raise
         append_jsonl(out / "pairs.jsonl", {
             "arm": arm, "run": run_no, "pair_id": pair_id, "qids": [neutral["qid"], leading["qid"]],
-            "same": verdict["same"], "judge": verdict, "judge_model": models["judge_model"], "timestamp": now(),
+            "same": verdict["same"], "judge": verdict, "judge_model": run_settings["judge_model"], "timestamp": now(),
         })
 
 
@@ -229,12 +236,12 @@ def record_failure(out: Path, arm: str, run_no: int, qid: str, exc: Exception) -
 
 
 def run(items: list[dict], arms: list[str], runs: int, out: Path, *, retrieve, generator, judge,
-        known: dict[str, str], models: dict, limiter, git: dict, gold_sha256: str) -> None:
+        chunk_texts: dict[str, str], run_settings: dict, limiter, git: dict, gold_sha256: str) -> None:
     """Answer and score every (arm, run, item) not already in out/raw.jsonl."""
     out.mkdir(parents=True, exist_ok=True)
     rows = {(r["arm"], r["run"], r["qid"]): r for r in read_jsonl(out / "raw.jsonl")}
     check_metric_version(out, rows)
-    record_provenance(out, arms, git, models, gold_sha256)
+    record_provenance(out, arms, git, run_settings, gold_sha256)
     prompt_hashes = {arm: arm_prompts(arm)["sha256"] for arm in arms}
     claim_cache = {(c["qid"], c["reference_sha256"]): c["claims"] for c in read_jsonl(out / "reference_claims.jsonl")}
     for arm in arms:
@@ -246,7 +253,7 @@ def run(items: list[dict], arms: list[str], runs: int, out: Path, *, retrieve, g
                 try:
                     answer, hits = answer_item(item, arm, retrieve=retrieve, generator=generator, limiter=limiter)
                     item_claims = reference_claims(item, out, judge, claim_cache) if item["expected"] == "answer" else None
-                    scored = score(item, arm, answer, hits, known=known, judge=judge, claims=item_claims)
+                    scores = score(item, arm, answer, hits, chunk_texts=chunk_texts, judge=judge, claims=item_claims)
                 except Exception as exc:
                     record_failure(out, arm, run_no, item["qid"], exc)
                     raise
@@ -256,10 +263,10 @@ def run(items: list[dict], arms: list[str], runs: int, out: Path, *, retrieve, g
                     "question": item["question"], "answer": answer,
                     "gold_keys": item["citation_keys"],
                     "retrieved": [{"citation_key": h.citation_key, "chunk_id": h.id, "distance": h.distance} for h in hits],
-                    "reference_contexts": [known[k] for k in item["citation_keys"]],
-                    **scored, **models, "prompt_sha256": prompt_hashes[arm],
+                    "reference_contexts": [chunk_texts[k] for k in item["citation_keys"]],
+                    **scores, **run_settings, "prompt_sha256": prompt_hashes[arm],
                     "metric_version": METRIC_VERSION, "timestamp": now(),
                 }
                 append_jsonl(out / "raw.jsonl", row)
                 rows[key] = row
-            judge_pairs(items, arm, run_no, rows, out, judge, models)
+            judge_pairs(items, arm, run_no, rows, out, judge, run_settings)

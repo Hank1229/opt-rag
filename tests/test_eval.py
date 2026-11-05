@@ -195,7 +195,7 @@ def test_extra_disclaimer_stripped_only_when_exact():
 # 3. Refuse items get only the refusal metric.
 def test_03_refuse_item_gets_only_refusal():
     judge = FakeJudge(verdict="REFUSED")
-    scored = score(item("Q12", expected="refuse"), "opt-rag", "Ask your DSO.", [hit("214.2(f)(10)")], known=KNOWN, judge=judge, claims=None)
+    scored = score(item("Q12", expected="refuse"), "opt-rag", "Ask your DSO.", [hit("214.2(f)(10)")], chunk_texts=KNOWN, judge=judge, claims=None)
     assert scored["metrics"] == {"refused": True, "refusal_verdict": "REFUSED"}
     assert judge.calls == ["refusal"]
 
@@ -203,7 +203,7 @@ def test_03_refuse_item_gets_only_refusal():
 def test_03_answer_item_gets_every_opt_rag_metric():
     judge = FakeJudge()
     hits = [hit("214.2(f)(5)(iv)", 1), hit("214.2(f)(10)", 2)]
-    scored = score(item(), "opt-rag", f"One year [2].\n\n{DISCLAIMER}", hits, known=KNOWN, judge=judge, claims=CLAIMS)
+    scored = score(item(), "opt-rag", f"One year [2].\n\n{DISCLAIMER}", hits, chunk_texts=KNOWN, judge=judge, claims=CLAIMS)
     assert scored["metrics"] == {
         "refused": False,
         "refusal_verdict": "ANSWERED",
@@ -219,7 +219,7 @@ def test_03_answer_item_gets_every_opt_rag_metric():
 
 def test_03_extra_bare_answer_item_has_no_retrieval_metrics():
     judge = FakeJudge()
-    scored = score(item(), "bare", "See 8 CFR 214.2(f)(10).", [], known=KNOWN, judge=judge, claims=CLAIMS)
+    scored = score(item(), "bare", "See 8 CFR 214.2(f)(10).", [], chunk_texts=KNOWN, judge=judge, claims=CLAIMS)
     assert set(scored["metrics"]) == {"refused", "refusal_verdict", "citation_accuracy", "answer_correctness"}
     assert sorted(judge.calls) == ["answer_correctness", "refusal"]
 
@@ -241,7 +241,7 @@ def test_04_resume_skips_completed_lines(tmp_path):
     generator = FakeGenerator()
     kwargs = dict(
         retrieve=lambda q: [hit("214.2(f)(10)")], generator=generator, judge=FakeJudge(),
-        known=KNOWN, models=MODELS, limiter=NoWait(), git=GIT, gold_sha256=GOLD_SHA256,
+        chunk_texts=KNOWN, run_settings=MODELS, limiter=NoWait(), git=GIT, gold_sha256=GOLD_SHA256,
     )
 
     run(items, ["opt-rag"], 1, tmp_path, **kwargs)
@@ -260,7 +260,7 @@ def test_04_extra_pairs_judged_once_per_arm_and_run(tmp_path):
     judge = FakeJudge()
     kwargs = dict(
         retrieve=lambda q: [hit("214.2(f)(10)")], generator=FakeGenerator(), judge=judge,
-        known=KNOWN, models=MODELS, limiter=NoWait(), git=GIT, gold_sha256=GOLD_SHA256,
+        chunk_texts=KNOWN, run_settings=MODELS, limiter=NoWait(), git=GIT, gold_sha256=GOLD_SHA256,
     )
     run(items, ["opt-rag", "bare"], 2, tmp_path, **kwargs)
     run(items, ["opt-rag", "bare"], 2, tmp_path, **kwargs)
@@ -278,7 +278,7 @@ def test_04_extra_failure_is_recorded_and_raised(tmp_path):
 
     with pytest.raises(RuntimeError):
         run([item("Q1")], ["bare"], 1, tmp_path, retrieve=None, generator=Broken(), judge=FakeJudge(),
-            known=KNOWN, models=MODELS, limiter=NoWait(), git=GIT, gold_sha256=GOLD_SHA256)
+            chunk_texts=KNOWN, run_settings=MODELS, limiter=NoWait(), git=GIT, gold_sha256=GOLD_SHA256)
     [failure] = read_jsonl(tmp_path / "failures.jsonl")
     assert (failure["arm"], failure["run"], failure["qid"]) == ("bare", 1, "Q1")
     assert "HTTP 400" in failure["error"]
@@ -348,7 +348,7 @@ def test_05_extra_n_shows_items_ragas_could_not_score():
 def test_extra_bare_arm_uses_its_own_prompt_and_opt_rag_keeps_the_shared_one(tmp_path):
     generator = FakeGenerator()
     run([item("Q1")], ["opt-rag", "bare"], 1, tmp_path, retrieve=lambda q: [hit("214.2(f)(10)")],
-        generator=generator, judge=FakeJudge(), known=KNOWN, models=MODELS, limiter=NoWait(), git=GIT, gold_sha256=GOLD_SHA256)
+        generator=generator, judge=FakeJudge(), chunk_texts=KNOWN, run_settings=MODELS, limiter=NoWait(), git=GIT, gold_sha256=GOLD_SHA256)
     rag_prompt, bare_prompt = generator.prompts
     assert rag_prompt.startswith(INSTRUCTIONS)
     assert bare_prompt == f"{BARE_INSTRUCTIONS}\n\nQuestion: Question Q1?"
@@ -359,7 +359,7 @@ def test_extra_bare_arm_uses_its_own_prompt_and_opt_rag_keeps_the_shared_one(tmp
 
 def test_extra_prompts_written_to_run_dir_and_hashed_into_rows(tmp_path):
     run([item("Q1")], ["opt-rag", "bare"], 1, tmp_path, retrieve=lambda q: [hit("214.2(f)(10)")],
-        generator=FakeGenerator(), judge=FakeJudge(), known=KNOWN, models=MODELS, limiter=NoWait(), git=GIT, gold_sha256=GOLD_SHA256)
+        generator=FakeGenerator(), judge=FakeJudge(), chunk_texts=KNOWN, run_settings=MODELS, limiter=NoWait(), git=GIT, gold_sha256=GOLD_SHA256)
     prompts = json.loads((tmp_path / "prompts.json").read_text())
     assert prompts["opt-rag"]["instructions"] == INSTRUCTIONS
     assert prompts["bare"]["instructions"] == BARE_INSTRUCTIONS
@@ -373,7 +373,7 @@ def test_extra_resume_refuses_a_changed_prompt(tmp_path):
     (tmp_path / "prompts.json").write_text(json.dumps(prompts))
     with pytest.raises(RuntimeError, match="bare prompt changed"):
         run([item("Q1")], ["bare"], 1, tmp_path, retrieve=None, generator=FakeGenerator(), judge=FakeJudge(),
-            known=KNOWN, models=MODELS, limiter=NoWait(), git=GIT, gold_sha256=GOLD_SHA256)
+            chunk_texts=KNOWN, run_settings=MODELS, limiter=NoWait(), git=GIT, gold_sha256=GOLD_SHA256)
     assert not (tmp_path / "raw.jsonl").exists()
 
 
@@ -414,7 +414,7 @@ def test_10c_1_label_is_defined_once_and_used_by_the_summary():
 
 def test_10c_1_claims_and_verdicts_stored_in_the_row_with_metric_version(tmp_path):
     run([item("Q1")], ["bare"], 1, tmp_path, retrieve=None, generator=FakeGenerator(), judge=FakeJudge(),
-        known=KNOWN, models=MODELS, limiter=NoWait(), git=GIT, gold_sha256=GOLD_SHA256)
+        chunk_texts=KNOWN, run_settings=MODELS, limiter=NoWait(), git=GIT, gold_sha256=GOLD_SHA256)
     [row] = read_jsonl(tmp_path / "raw.jsonl")
     assert row["metrics"]["answer_correctness"] == 0.5
     assert row["judge"]["answer_correctness"] == {"reference_claims": ["Claim A.", "Claim B."], "verdicts": [True, False]}
@@ -532,7 +532,7 @@ def test_10c_3_extra_number_prefix_and_descendant_are_not_ancestors():
 def fake_run(tmp_path, items, arms=("opt-rag", "bare"), runs=1, judge=None, git=GIT, gold_sha256=GOLD_SHA256):
     judge = judge or FakeJudge()
     run(items, list(arms), runs, tmp_path, retrieve=lambda q: [hit("214.2(f)(10)")], generator=FakeGenerator(),
-        judge=judge, known=KNOWN, models=MODELS, limiter=NoWait(), git=git, gold_sha256=GOLD_SHA256)
+        judge=judge, chunk_texts=KNOWN, run_settings=MODELS, limiter=NoWait(), git=git, gold_sha256=GOLD_SHA256)
     return judge
 
 
@@ -577,7 +577,7 @@ def test_10d_2_resume_refuses_another_metric_version(tmp_path):
     generator = FakeGenerator()
     with pytest.raises(RuntimeError, match="metric_version step10-older"):
         run([item("Q1"), item("Q2")], ["bare"], 1, tmp_path, retrieve=None, generator=generator, judge=FakeJudge(),
-            known=KNOWN, models=MODELS, limiter=NoWait(), git=GIT, gold_sha256=GOLD_SHA256)
+            chunk_texts=KNOWN, run_settings=MODELS, limiter=NoWait(), git=GIT, gold_sha256=GOLD_SHA256)
     assert generator.prompts == []
     assert len(read_jsonl(tmp_path / "raw.jsonl")) == 1
 
@@ -650,7 +650,7 @@ def test_10e_9_failure_masks_api_keys(tmp_path):
 
     with pytest.raises(RuntimeError):
         run([item("Q1")], ["bare"], 1, tmp_path, retrieve=None, generator=Broken(), judge=FakeJudge(),
-            known=KNOWN, models=MODELS, limiter=NoWait(), git=GIT, gold_sha256=GOLD_SHA256)
+            chunk_texts=KNOWN, run_settings=MODELS, limiter=NoWait(), git=GIT, gold_sha256=GOLD_SHA256)
     text = (tmp_path / "failures.jsonl").read_text()
     assert "sk-" not in text and "abcd" not in text and "AIza" not in text and "x_9Qk" not in text
     [failure] = read_jsonl(tmp_path / "failures.jsonl")
@@ -677,7 +677,7 @@ def test_10e_9_extra_words_containing_sk_dash_are_kept(tmp_path):
 
     with pytest.raises(RuntimeError):
         run([item("Q1")], ["bare"], 1, tmp_path, retrieve=None, generator=Broken(), judge=FakeJudge(),
-            known=KNOWN, models=MODELS, limiter=NoWait(), git=GIT, gold_sha256=GOLD_SHA256)
+            chunk_texts=KNOWN, run_settings=MODELS, limiter=NoWait(), git=GIT, gold_sha256=GOLD_SHA256)
     assert read_jsonl(tmp_path / "failures.jsonl")[0]["error"] == "task-queue full"
 
 
@@ -708,7 +708,7 @@ def test_10e_3_extra_resume_refuses_another_gold_hash(tmp_path):
     fake_run(tmp_path, [item("Q1")])
     with pytest.raises(RuntimeError, match="gold_sha256 changed"):
         run([item("Q1")], ["bare"], 2, tmp_path, retrieve=None, generator=FakeGenerator(), judge=FakeJudge(),
-            known=KNOWN, models=MODELS, limiter=NoWait(), git=GIT, gold_sha256="e" * 64)
+            chunk_texts=KNOWN, run_settings=MODELS, limiter=NoWait(), git=GIT, gold_sha256="e" * 64)
     assert len(read_jsonl(tmp_path / "raw.jsonl")) == 2
 
 
@@ -746,7 +746,7 @@ def test_10e_4_extra_resume_refuses_a_changed_judge_prompt(tmp_path, monkeypatch
 def test_10e_4_extra_bare_prompt_sent_matches_the_hashed_template(tmp_path):
     generator = FakeGenerator()
     run([item("Q1")], ["bare"], 1, tmp_path, retrieve=None, generator=generator, judge=FakeJudge(),
-        known=KNOWN, models=MODELS, limiter=NoWait(), git=GIT, gold_sha256=GOLD_SHA256)
+        chunk_texts=KNOWN, run_settings=MODELS, limiter=NoWait(), git=GIT, gold_sha256=GOLD_SHA256)
     assert generator.prompts == [arm_prompts("bare")["template"].replace("<question>", "Question Q1?")]
 
 
@@ -784,7 +784,7 @@ def test_10e_5_temperature_and_top_k_in_prompts_json_and_every_row(tmp_path):
     assert (models["generation_temperature"], models["top_k"]) == (0.0, 5)
     run([item("Q1"), item("Q12", expected="refuse")], ["opt-rag", "bare"], 1, tmp_path,
         retrieve=lambda q: [hit("214.2(f)(10)")], generator=SettingsGenerator(), judge=FakeJudge(),
-        known=KNOWN, models=models, limiter=NoWait(), git=GIT, gold_sha256=GOLD_SHA256)
+        chunk_texts=KNOWN, run_settings=models, limiter=NoWait(), git=GIT, gold_sha256=GOLD_SHA256)
     assert json.loads((tmp_path / "prompts.json").read_text())["models"] == models
     rows = read_jsonl(tmp_path / "raw.jsonl")
     assert len(rows) == 4
@@ -797,7 +797,7 @@ def test_10e_5_extra_resume_refuses_another_temperature(tmp_path):
     (tmp_path / "prompts.json").write_text(json.dumps(json.loads((tmp_path / "prompts.json").read_text()) | {"models": models}))
     with pytest.raises(RuntimeError, match="models changed"):
         run([item("Q1")], ["bare"], 2, tmp_path, retrieve=None, generator=FakeGenerator(), judge=FakeJudge(),
-            known=KNOWN, models=models | {"generation_temperature": 0.7}, limiter=NoWait(), git=GIT,
+            chunk_texts=KNOWN, run_settings=models | {"generation_temperature": 0.7}, limiter=NoWait(), git=GIT,
             gold_sha256=GOLD_SHA256)
 
 
