@@ -1,14 +1,17 @@
 """Turn the committed raw corpus into chunks, plus the quality gate that checks them.
 
-Tier 1 (eCFR): only paragraph (f) of 8 CFR 214.2, one chunk per numbered
-paragraph, keyed by its paragraph ID, e.g. 214.2(f)(10)(ii)(C).
-Tier 2 (Study in the States): one chunk per h2-h5 section, and one per accordion
-question; keyed by page slug plus heading path. Text before the first heading
-that is only in-page anchor links is dropped.
-Raw files are checked against the manifest's raw_sha256 before any chunking.
-Sections over MAX_TOKENS fall back to size-based splits that keep the parent key.
 Everything here is offline and deterministic: same raw files in, same chunks out.
 Design: CLAUDE.md "Chunking"; DECISIONS.md, Step 07.
+
+- Raw files are checked against the manifest's raw_sha256 before any chunking.
+- Tier 1 (eCFR): only paragraph (f) of 8 CFR 214.2, one chunk per numbered paragraph,
+  keyed by its paragraph ID, e.g. 214.2(f)(10)(ii)(C).
+- Tier 2 (Study in the States): one chunk per h2-h5 section and one per accordion question,
+  keyed by page slug plus heading path. Text before the first heading that is only in-page
+  anchor links is dropped.
+- Sections over MAX_TOKENS fall back to size-based splits that keep the parent key.
+
+File order: shared entry points and the gate, then the Tier 1 parser, then the Tier 2 parser.
 """
 
 import hashlib
@@ -98,8 +101,8 @@ def load_documents(raw_dir: Path) -> list[Document]:
 
 
 def make_chunks(citation_key: str, header: str, text: str) -> list[Chunk]:
-    parts = [text] if count_tokens(text) <= MAX_TOKENS else split_oversized(text)
-    return [Chunk(citation_key, i, header, part) for i, part in enumerate(parts)]
+    texts = [text] if count_tokens(text) <= MAX_TOKENS else split_oversized(text)
+    return [Chunk(citation_key, i, header, chunk_text) for i, chunk_text in enumerate(texts)]
 
 
 def split_oversized(text: str, limit: int = MAX_TOKENS) -> list[str]:
@@ -108,40 +111,41 @@ def split_oversized(text: str, limit: int = MAX_TOKENS) -> list[str]:
     Cuts at line breaks first, then sentence ends, then plain whitespace, so no
     word is cut in half.
     """
-    units = []  # (text, starts_new_line, tokens)
+    units = []  # (segment, starts_new_line, tokens)
     for line in text.split("\n"):
-        pieces = [line] if count_tokens(line) <= limit else _split_line(line, limit)
-        units += [(piece, i == 0, count_tokens(piece)) for i, piece in enumerate(pieces)]
+        segments = [line] if count_tokens(line) <= limit else _split_long_line(line, limit)
+        units += [(segment, i == 0, count_tokens(segment)) for i, segment in enumerate(segments)]
 
     total = sum(tokens for _, _, tokens in units)
     target = math.ceil(total / math.ceil(total / limit))
-    parts, current, current_tokens = [], "", 0
-    for piece, new_line, tokens in units:
+    chunk_texts, current, current_tokens = [], "", 0
+    for segment, starts_new_line, tokens in units:
         if current and current_tokens + tokens > target:
-            parts.append(current)
+            chunk_texts.append(current)
             current, current_tokens = "", 0
-        separator = "" if not current else ("\n" if new_line else " ")
-        current += separator + piece
+        separator = "" if not current else ("\n" if starts_new_line else " ")
+        current += separator + segment
         current_tokens += tokens
     if current:
-        parts.append(current)
-    return parts
+        chunk_texts.append(current)
+    return chunk_texts
 
 
-def _split_line(line: str, limit: int) -> list[str]:
-    pieces = []
+def _split_long_line(line: str, limit: int) -> list[str]:
+    """Segments of at most `limit` tokens: whole sentences, or word windows of a long sentence."""
+    segments = []
     for sentence in re.split(r"(?<=[.;:?!])\s+", line):
         if count_tokens(sentence) <= limit:
-            pieces.append(sentence)
+            segments.append(sentence)
             continue
         words, window = sentence.split(), []
         for word in words:
             if window and count_tokens(" ".join(window + [word])) > limit:
-                pieces.append(" ".join(window))
+                segments.append(" ".join(window))
                 window = []
             window.append(word)
-        pieces.append(" ".join(window))
-    return pieces
+        segments.append(" ".join(window))
+    return segments
 
 
 def check_chunks(documents: list[Document]) -> list[str]:
@@ -285,7 +289,7 @@ def slugify(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
 
 
-def clean(text: str) -> str:
+def collapse_whitespace(text: str) -> str:
     return " ".join(text.split())
 
 
@@ -310,7 +314,7 @@ def sits_sections(page: str, slug: str) -> tuple[str, list[tuple[str, str, str]]
     """Title and (citation_key, header, text) sections of one page's article body."""
     soup = BeautifulSoup(page, "html.parser")
     article = soup.find("article")
-    title = clean(article.find(class_="field--name-title").get_text())
+    title = collapse_whitespace(article.find(class_="field--name-title").get_text())
     walker = _SitsWalker()
     walker.walk(article.find(class_="field--name-body"))
 
@@ -377,22 +381,23 @@ class _SitsWalker:
             else:
                 self._flush(line, prefix)
                 line = _Line()
-                self._block(child)
+                self._walk_block(child)
         self._flush(line, prefix)
 
     def _flush(self, line: _Line, prefix: str) -> None:
-        text = clean("".join(line.text))
+        text = collapse_whitespace("".join(line.text))
         if text:
             self.lines.append(prefix + text)
             self.navigation.append(
                 is_navigation("".join(line.outside_links), line.in_page_links, line.other_links)
             )
 
-    def _block(self, tag: Tag) -> None:
+    def _walk_block(self, tag: Tag) -> None:
+        """A block-level tag: skip it, start a section at a heading or <dt>, or walk into it."""
         if tag.name in SKIP_TAGS:
             return
         if tag.name in SECTION_LEVELS:
-            text = clean(tag.get_text())
+            text = collapse_whitespace(tag.get_text())
             if not text:
                 return  # the site has a few empty <h3>s
             level = SECTION_LEVELS[tag.name]
@@ -407,7 +412,7 @@ class _SitsWalker:
             self.walk(tag)
             self.lines, self.navigation = enclosing
         elif tag.name == "dt":
-            self._start([t for _, t in self.headings] + [clean(tag.get_text())])
+            self._start([t for _, t in self.headings] + [collapse_whitespace(tag.get_text())])
         elif tag.name == "li":
             self.walk(tag, prefix="- ")
         else:
