@@ -1,9 +1,10 @@
 """Ingest CLI: chunk the committed raw corpus, run the quality gate, embed, write to Postgres.
 
-Every run checks raw file hashes against the manifest, chunks data/raw/, checks
-the chunks, and writes a JSON chunk report. If the gate finds a problem the run
-stops before any Gemini call or database write. A real run
-then embeds and writes one document at a time; a failed document keeps its old
+Every run, dry or real:
+- checks raw file hashes against the manifest, chunks data/raw/ and checks the chunks;
+- writes a JSON chunk report;
+- stops before any Gemini call or database write if the gate finds a problem.
+A real run then embeds and writes one document at a time; a failed document keeps its old
 rows, the rest still update, and the exit code is non-zero.
 
 Usage:
@@ -66,11 +67,12 @@ def database_url(target: str) -> str:
 
 
 def build_report(documents: list[Document], problems: list[str]) -> dict:
-    report_docs = []
+    """The chunk report: per-document token and size ranges, plus a preview of every chunk."""
+    document_reports = []
     for doc in documents:
         tokens = [count_tokens(c.content) for c in doc.chunks]
         chars = [len(c.content) for c in doc.chunks]
-        report_docs.append({
+        document_reports.append({
             "source_id": doc.source_id,
             "source_tier": doc.source_tier,
             "title": doc.title,
@@ -83,13 +85,13 @@ def build_report(documents: list[Document], problems: list[str]) -> dict:
             "citation_keys": list(dict.fromkeys(c.citation_key for c in doc.chunks)),
             "chunks": [
                 {
-                    "citation_key": c.citation_key,
-                    "chunk_index": c.chunk_index,
-                    "tokens": n,
-                    "header": c.header,
-                    "preview": f"{c.header}\n{c.content[:PREVIEW_CHARS]}",
+                    "citation_key": chunk.citation_key,
+                    "chunk_index": chunk.chunk_index,
+                    "tokens": chunk_tokens,
+                    "header": chunk.header,
+                    "preview": f"{chunk.header}\n{chunk.content[:PREVIEW_CHARS]}",
                 }
-                for c, n in zip(doc.chunks, tokens)
+                for chunk, chunk_tokens in zip(doc.chunks, tokens)
             ],
         })
     return {
@@ -97,7 +99,7 @@ def build_report(documents: list[Document], problems: list[str]) -> dict:
         "document_count": len(documents),
         "chunk_count": sum(len(d.chunks) for d in documents),
         "problems": problems,
-        "documents": report_docs,
+        "documents": document_reports,
     }
 
 
@@ -130,22 +132,22 @@ def main(argv=None, embedder=None) -> int:
     embedder = embedder or GeminiEmbedder(env_value("GEMINI_API_KEY"), cache=EMBEDDING_CACHE)
 
     started = time.monotonic()
-    failed = []
+    failed_ids = []
     with connect(conninfo, autocommit=True) as conn:
         for doc in documents:
             try:
                 vectors = embedder.embed([c.embed_text for c in doc.chunks])
                 write_document(conn, doc, vectors)
             except Exception as exc:  # one bad document must not stop the others
-                failed.append(doc.source_id)
+                failed_ids.append(doc.source_id)
                 print(f"FAILED {doc.source_id}: {type(exc).__name__}: {exc}", file=sys.stderr)
                 continue
             print(f"written {doc.source_id}: {len(doc.chunks)} chunks")
 
     elapsed = time.monotonic() - started
-    written = len(documents) - len(failed)
+    written = len(documents) - len(failed_ids)
     print(f"{written}/{len(documents)} documents written in {elapsed:.1f} s")
-    if failed:
-        print(f"failed, left unchanged: {', '.join(failed)}", file=sys.stderr)
+    if failed_ids:
+        print(f"failed, left unchanged: {', '.join(failed_ids)}", file=sys.stderr)
         return 1
     return 0
