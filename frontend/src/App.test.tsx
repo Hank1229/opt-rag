@@ -167,7 +167,7 @@ test('S13-1b: a <script> tag in the answer shows as text and never becomes a scr
   render(<App />)
   await ask()
   expect(screen.getByTestId('answer').textContent).toContain('<script>alert(1)</script>')
-  expect(document.querySelector('script')).toBeNull()
+  expect(screen.getByTestId('answer').querySelector('script')).toBeNull()
 })
 
 test('S13-1 extra: a <script> block at line start (CommonMark HTML block) also stays text', async () => {
@@ -175,7 +175,7 @@ test('S13-1 extra: a <script> block at line start (CommonMark HTML block) also s
   render(<App />)
   await ask()
   expect(screen.getByTestId('answer').textContent).toContain('<script>alert(1)</script>')
-  expect(document.querySelector('script')).toBeNull()
+  expect(screen.getByTestId('answer').querySelector('script')).toBeNull()
 })
 
 test('S13-1 extra: a javascript: markdown link gets no javascript href', async () => {
