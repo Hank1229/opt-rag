@@ -12,7 +12,7 @@ RETRY_DELAY_RE = re.compile(r'"retryDelay":\s*"(\d+(?:\.\d+)?)s"')
 
 
 class RetryDelayTooLong(RuntimeError):
-    pass
+    """The wait Gemini asks for, or the request's total wait, is past the limit."""
 
 
 def wait_to_retry(attempt: int, reply: str, sleep, slept: float) -> float:
