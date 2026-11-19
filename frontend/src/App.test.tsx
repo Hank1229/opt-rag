@@ -100,13 +100,15 @@ test('3: answer on top, sources below in response order with label, tier tag, an
   const rows = screen.getAllByRole('listitem')
   expect(rows).toHaveLength(2)
   expect(answer.compareDocumentPosition(rows[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  const shown = ['[1] 8 CFR 214.2(f)(10)(ii)(E)', '[2] Form I-983 Overview']
+  const tiers = ['eCFR', 'Study in the States']
   rows.forEach((row, i) => {
     const link = row.querySelector('a')!
-    expect(link.textContent).toBe(SOURCES[i].label)
+    expect(link.textContent).toBe(shown[i])
     expect(link.getAttribute('href')).toBe(SOURCES[i].url)
     expect(link.getAttribute('target')).toBe('_blank')
     expect(link.getAttribute('rel')).toBe('noopener')
-    expect(row.querySelector('.tier')!.textContent).toBe(SOURCES[i].source_tier)
+    expect(row.querySelector('.tier')!.textContent).toBe(tiers[i])
   })
   expect(screen.queryByText(/0\.21|0\.34/)).toBeNull()
 })
@@ -176,6 +178,19 @@ test('S13-1 extra: a <script> block at line start (CommonMark HTML block) also s
   await ask()
   expect(screen.getByTestId('answer').textContent).toContain('<script>alert(1)</script>')
   expect(document.querySelector('script')).toBeNull()
+})
+
+test('S13-1 extra: <script> and <img onerror> in one answer both show as inert text and nothing runs', async () => {
+  const alert = vi.spyOn(window, 'alert').mockImplementation(() => {})
+  mockFetch(() => json({ answer: '<script>alert(1)</script> and <img src=x onerror=alert(1)>', sources: [] }))
+  render(<App />)
+  await ask()
+  const answer = screen.getByTestId('answer')
+  expect(answer.textContent).toContain('<script>alert(1)</script>')
+  expect(answer.textContent).toContain('<img src=x onerror=alert(1)>')
+  expect(document.querySelector('script, img, [onerror]')).toBeNull()
+  expect(alert).not.toHaveBeenCalled()
+  alert.mockRestore()
 })
 
 test('S13-1 extra: a javascript: markdown link gets no javascript href', async () => {
@@ -351,4 +366,166 @@ test('F5b: a markdown image from the model renders no <img>', async () => {
   await ask()
   expect(screen.getByTestId('answer').querySelector('img')).toBeNull()
   expect(document.querySelector('img')).toBeNull()
+})
+
+// Polish pass (extra: tests added by Claude)
+
+test('polish extra: Try again resends the question and shows the answer', async () => {
+  const fetch = mockFetch(() => json({}, 503))
+  render(<App />)
+  await ask()
+  fetch.mockImplementation(() => json({ answer: 'Up to 90 days [1].', sources: SOURCES }))
+  await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Try again' })))
+  expect(queryCalls(fetch)).toHaveLength(2)
+  expect(screen.queryByRole('alert')).toBeNull()
+  expect(screen.getByTestId('answer').textContent).toBe('Up to 90 days [1].')
+})
+
+test('polish extra: unreachable API shows the red error band, and Try again resends the same question', async () => {
+  const fetch = mockFetch(() => Promise.reject(new TypeError('Failed to fetch')))
+  render(<App />)
+  await ask()
+  expect(screen.getByRole('alert').parentElement!.className).toContain('band-error')
+  await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Try again' })))
+  const bodies = queryCalls(fetch).map(([, init]) => init!.body)
+  expect(bodies).toEqual([JSON.stringify({ question: QUESTION }), JSON.stringify({ question: QUESTION })])
+  expect(screen.getByRole('alert')).toBeTruthy()
+})
+
+test('polish extra: editing the input after an error does not change what Try again resends', async () => {
+  const fetch = mockFetch(() => json({}, 503))
+  render(<App />)
+  await ask()
+  fireEvent.change(input(), { target: { value: 'A different question' } })
+  await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Try again' })))
+  const bodies = queryCalls(fetch).map(([, init]) => init!.body)
+  expect(bodies).toEqual(Array(2).fill(JSON.stringify({ question: QUESTION })))
+})
+
+test('polish extra: a source with a javascript: url shows its label as plain text, not a link', async () => {
+  const sources = [{ ...SOURCES[0], url: 'javascript:alert(1)' }, SOURCES[1]]
+  mockFetch(() => json({ answer: 'Up to 90 days [1].', sources }))
+  render(<App />)
+  await ask()
+  const [bad, good] = screen.getAllByRole('listitem')
+  expect(bad.querySelector('a')).toBeNull()
+  expect(bad.textContent).toContain(SOURCES[0].label)
+  expect(good.querySelector('a')!.getAttribute('href')).toBe(SOURCES[1].url)
+})
+
+test.each([
+  ['leading whitespace before the refusal opening', '\n  The provided sources do not contain the answer to this.', true],
+  ['no leading whitespace', 'The provided sources do not contain the answer to this.', true],
+  ['extra: leading whitespace before ordinary text', '\n  Sure, here is the answer.', false],
+])('refusal band: %s', async (_, answer, is_refusal) => {
+  mockFetch(() => json({ answer, sources: SOURCES }))
+  render(<App />)
+  await ask()
+  expect(screen.getByTestId('answer').className.includes('band-refusal')).toBe(is_refusal)
+})
+
+test('polish extra: the asked question shows as a heading; a refusal with sources gets the refusal band but keeps its sources', async () => {
+  mockFetch(() => json({ answer: 'The provided sources do not contain the answer to this question.', sources: SOURCES }))
+  render(<App />)
+  await ask()
+  expect(screen.getByRole('heading', { name: QUESTION })).toBeTruthy()
+  expect(screen.getByTestId('answer').className).toContain('band-refusal')
+})
+
+const EXAMPLES = [
+  "How long do I need to study full-time before I'm eligible for OPT?",
+  "I'm on OPT. How recent does the travel signature on my I-20 need to be when I re-enter the U.S.?",
+  "I'm on OPT based on a non-STEM degree, but I earned a STEM degree before that. Can I use my earlier degree to apply for a STEM OPT extension, and what requirements would my earlier degree and current job need to meet?",
+]
+const exampleButton = (text: string) => screen.queryByRole('button', { name: text })
+
+test('examples a: the empty state shows three buttons with the exact example questions, not a list', async () => {
+  mockFetch(() => json({ answer: 'x', sources: [] }))
+  render(<App />)
+  EXAMPLES.forEach((text) => expect(exampleButton(text)).toBeTruthy())
+  expect(document.querySelectorAll('.example')).toHaveLength(3)
+  expect(screen.queryByRole('list')).toBeNull()
+})
+
+test.each(EXAMPLES.map((text, i) => [i + 1, text] as const))(
+  'examples b: clicking example %i sends one POST /query with that exact question',
+  async (_, text) => {
+    const fetch = mockFetch(() => new Promise(() => {}))
+    render(<App />)
+    await act(async () => fireEvent.click(exampleButton(text)!))
+    expect(queryCalls(fetch)).toHaveLength(1)
+    expect(queryCalls(fetch)[0][1]!.body).toBe(JSON.stringify({ question: text }))
+    expect(input().value).toBe(text)
+  },
+)
+
+test('examples c (extra): once the answer appears, the example buttons are gone', async () => {
+  mockFetch(() => json({ answer: 'Up to 90 days [1].', sources: SOURCES }))
+  render(<App />)
+  await act(async () => fireEvent.click(exampleButton(EXAMPLES[0])!))
+  expect(screen.getByTestId('answer')).toBeTruthy()
+  expect(document.querySelector('.example')).toBeNull()
+})
+
+test('examples d (extra): while a request is loading no example button is left to start a second request', async () => {
+  const fetch = mockFetch(() => new Promise(() => {}))
+  render(<App />)
+  await act(async () => fireEvent.click(exampleButton(EXAMPLES[0])!))
+  expect(screen.getByText(SEARCHING)).toBeTruthy()
+  expect(document.querySelector('.example')).toBeNull()
+  expect(queryCalls(fetch)).toHaveLength(1)
+})
+
+// Source names and intro sentence
+
+const INTRO = 'Answers from 8 CFR 214.2(f) and Study in the States, with sources. Pick an example or type your own.'
+const SLUG = 'applying-for-practical-training#practical-training-for-f-students/optional-practical-training'
+
+async function askWithSources(sources: unknown[]) {
+  mockFetch(() => json({ answer: 'Up to 90 days [1].', sources }))
+  render(<App />)
+  await ask()
+}
+
+test('names a: a sits source shows its title and "Study in the States", never the raw key slug', async () => {
+  const sits = {
+    label: `[1] Applying for Practical Training ${SLUG}`,
+    title: 'Applying for Practical Training',
+    source_tier: 'sits',
+    url: 'https://studyinthestates.dhs.gov/students/work/applying-for-practical-training',
+  }
+  await askWithSources([sits])
+  const row = screen.getByRole('listitem')
+  expect(row.querySelector('a')!.textContent).toBe('[1] Applying for Practical Training')
+  expect(row.querySelector('a')!.getAttribute('href')).toBe(sits.url)
+  expect(row.querySelector('.tier')!.textContent).toBe('Study in the States')
+  expect(document.body.textContent).not.toContain(SLUG)
+})
+
+test('names b: an ecfr source keeps its label and shows "eCFR"', async () => {
+  await askWithSources([{ ...SOURCES[0], label: '[1] 8 CFR 214.2(f)(10)', title: '8 CFR 214.2(f) Students' }])
+  const row = screen.getByRole('listitem')
+  expect(row.querySelector('a')!.textContent).toBe('[1] 8 CFR 214.2(f)(10)')
+  expect(row.querySelector('.tier')!.textContent).toBe('eCFR')
+})
+
+test('names c (extra): an unknown tier "foo" is shown as is and does not crash', async () => {
+  await askWithSources([{ ...SOURCES[0], source_tier: 'foo' }])
+  expect(screen.getByRole('listitem').querySelector('.tier')!.textContent).toBe('foo')
+})
+
+test('names d (extra): a sits source with no title shows its label', async () => {
+  const label = `[1] Form I-983 Overview ${SLUG}`
+  await askWithSources([{ label, source_tier: 'sits', url: SOURCES[1].url }])
+  expect(screen.getByRole('listitem').querySelector('a')!.textContent).toBe(label)
+})
+
+test('intro e: the sentence shows in the empty state, under the title, and is gone once an answer is shown', async () => {
+  mockFetch(() => json({ answer: 'Up to 90 days [1].', sources: SOURCES }))
+  render(<App />)
+  const intro = screen.getByText(INTRO)
+  const title = screen.getByRole('heading', { level: 1 })
+  expect(title.compareDocumentPosition(intro) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  await ask()
+  expect(screen.queryByText(INTRO)).toBeNull()
 })
