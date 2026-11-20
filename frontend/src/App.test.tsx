@@ -1,4 +1,4 @@
-// Step 11 and 13 tests: the question form, its states, answer rendering, and citation markers, with fetch mocked.
+// Step 11 and 13 tests: the question form, its states, answer rendering, and citation chips, with fetch mocked.
 // Numbered tests map to Hank's expected results (Step 11: 1-5, Step 13: S13-1 to S13-3,
 // review follow-ups of Step 13: F1 to F5);
 // "extra" tests are edge cases added by Claude.
@@ -95,19 +95,21 @@ test('3: answer on top, sources below in response order with label, tier tag, an
     body: JSON.stringify({ question: QUESTION }),
   })
   const answer = screen.getByTestId('answer')
-  expect(answer.textContent).toBe('Up to 90 days [1].')
+  expect(answer.textContent).toBe('Up to 90 days 1.')
 
   const rows = screen.getAllByRole('listitem')
   expect(rows).toHaveLength(2)
   expect(answer.compareDocumentPosition(rows[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-  const shown = ['[1] 8 CFR 214.2(f)(10)(ii)(E)', '[2] Form I-983 Overview']
+  const shown = ['8 CFR 214.2(f)(10)(ii)(E)', 'Form I-983 Overview']
   const tiers = ['eCFR', 'Study in the States']
   rows.forEach((row, i) => {
     const link = row.querySelector('a')!
-    expect(link.textContent).toBe(shown[i])
+    expect(visibleTitle(row)).toBe(shown[i])
+    expect(link.textContent).toBe(`Open on ${tiers[i]}`)
+    expect(link.getAttribute('aria-label')).toBe(`Open on ${tiers[i]}: ${shown[i]}, opens in a new tab`)
     expect(link.getAttribute('href')).toBe(SOURCES[i].url)
     expect(link.getAttribute('target')).toBe('_blank')
-    expect(link.getAttribute('rel')).toBe('noopener')
+    expect(link.getAttribute('rel')).toBe('noopener noreferrer')
     expect(row.querySelector('.tier')!.textContent).toBe(tiers[i])
   })
   expect(screen.queryByText(/0\.21|0\.34/)).toBeNull()
@@ -142,7 +144,7 @@ test('extra: a new question after an error clears the error', async () => {
   fetch.mockImplementation(() => json({ answer: 'Up to 90 days [1].', sources: SOURCES }))
   await ask()
   expect(screen.queryByRole('alert')).toBeNull()
-  expect(screen.getByTestId('answer').textContent).toBe('Up to 90 days [1].')
+  expect(screen.getByTestId('answer').textContent).toBe('Up to 90 days 1.')
 })
 
 // Step 13
@@ -154,6 +156,13 @@ const FIVE_SOURCES = Array.from({ length: 5 }, (_, i) => ({
 }))
 
 const markers = () => screen.getAllByRole('listitem').map((row) => row.querySelector('.citation')!.textContent)
+
+// The title as sighted users read it: the screen-reader-only "Source N: " prefix is dropped.
+function visibleTitle(row: Element) {
+  const title = row.querySelector('.source-title')!.cloneNode(true) as Element
+  title.querySelector('.sr-only')!.remove()
+  return title.textContent
+}
 
 test('S13-1a: markdown bold renders as <strong> without literal asterisks', async () => {
   mockFetch(() => json({ answer: 'The student must be enrolled for **one full academic year** [1].', sources: SOURCES }))
@@ -221,7 +230,8 @@ test('S13-2 extra, F1b: adjacent citations [2][4], the prompt\'s documented form
   render(<App />)
   await ask()
   expect(markers()).toEqual(['retrieved, not cited', 'cited', 'retrieved, not cited', 'cited', 'retrieved, not cited'])
-  expect(screen.getByTestId('answer').textContent).toBe('Both apply [2][4].')
+  expect(screen.getByTestId('answer').textContent).toBe('Both apply 24.')
+  expect([...screen.getByTestId('answer').querySelectorAll('a.chip')].map((chip) => chip.getAttribute('href'))).toEqual(['#src-2', '#src-4'])
 })
 
 test('S13-3c: mount -> exactly one fetch, a GET to /health, none to /query', async () => {
@@ -378,7 +388,7 @@ test('polish extra: Try again resends the question and shows the answer', async 
   await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Try again' })))
   expect(queryCalls(fetch)).toHaveLength(2)
   expect(screen.queryByRole('alert')).toBeNull()
-  expect(screen.getByTestId('answer').textContent).toBe('Up to 90 days [1].')
+  expect(screen.getByTestId('answer').textContent).toBe('Up to 90 days 1.')
 })
 
 test('polish extra: unreachable API shows the red error band, and Try again resends the same question', async () => {
@@ -409,7 +419,7 @@ test('polish extra: a source with a javascript: url shows its label as plain tex
   await ask()
   const [bad, good] = screen.getAllByRole('listitem')
   expect(bad.querySelector('a')).toBeNull()
-  expect(bad.textContent).toContain(SOURCES[0].label)
+  expect(bad.textContent).toContain('8 CFR 214.2(f)(10)(ii)(E)')
   expect(good.querySelector('a')!.getAttribute('href')).toBe(SOURCES[1].url)
 })
 
@@ -487,7 +497,7 @@ async function askWithSources(sources: unknown[]) {
   await ask()
 }
 
-test('names a: a sits source shows its title and "Study in the States", never the raw key slug', async () => {
+test('names a: a sits source shows its title and "Open on Study in the States", never the raw key slug', async () => {
   const sits = {
     label: `[1] Applying for Practical Training ${SLUG}`,
     title: 'Applying for Practical Training',
@@ -496,7 +506,9 @@ test('names a: a sits source shows its title and "Study in the States", never th
   }
   await askWithSources([sits])
   const row = screen.getByRole('listitem')
-  expect(row.querySelector('a')!.textContent).toBe('[1] Applying for Practical Training')
+  expect(visibleTitle(row)).toBe('Applying for Practical Training')
+  expect(row.querySelector('a')!.textContent).toBe('Open on Study in the States')
+  expect(row.querySelector('a')!.getAttribute('aria-label')).toBe('Open on Study in the States: Applying for Practical Training, opens in a new tab')
   expect(row.querySelector('a')!.getAttribute('href')).toBe(sits.url)
   expect(row.querySelector('.tier')!.textContent).toBe('Study in the States')
   expect(document.body.textContent).not.toContain(SLUG)
@@ -505,7 +517,8 @@ test('names a: a sits source shows its title and "Study in the States", never th
 test('names b: an ecfr source keeps its label and shows "eCFR"', async () => {
   await askWithSources([{ ...SOURCES[0], label: '[1] 8 CFR 214.2(f)(10)', title: '8 CFR 214.2(f) Students' }])
   const row = screen.getByRole('listitem')
-  expect(row.querySelector('a')!.textContent).toBe('[1] 8 CFR 214.2(f)(10)')
+  expect(visibleTitle(row)).toBe('8 CFR 214.2(f)(10)')
+  expect(row.querySelector('a')!.textContent).toBe('Open on eCFR')
   expect(row.querySelector('.tier')!.textContent).toBe('eCFR')
 })
 
@@ -517,15 +530,120 @@ test('names c (extra): an unknown tier "foo" is shown as is and does not crash',
 test('names d (extra): a sits source with no title shows its label', async () => {
   const label = `[1] Form I-983 Overview ${SLUG}`
   await askWithSources([{ label, source_tier: 'sits', url: SOURCES[1].url }])
-  expect(screen.getByRole('listitem').querySelector('a')!.textContent).toBe(label)
+  expect(visibleTitle(screen.getByRole('listitem'))).toBe(label.replace('[1] ', ''))
 })
 
-test('intro e: the sentence shows in the empty state, under the title, and is gone once an answer is shown', async () => {
+test('intro e: the sentence is the title in the empty state, and is gone once an answer is shown', async () => {
   mockFetch(() => json({ answer: 'Up to 90 days [1].', sources: SOURCES }))
   render(<App />)
-  const intro = screen.getByText(INTRO)
-  const title = screen.getByRole('heading', { level: 1 })
-  expect(title.compareDocumentPosition(intro) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(INTRO)
   await ask()
   expect(screen.queryByText(INTRO)).toBeNull()
+})
+
+// Option D restyle (extra: tests added by Claude)
+
+const FOOTER = "Not legal advice. Check with your school's DSO before you act."
+
+test('restyle a: "12 months" is highlighted and the citation is a chip linking to #src-1', async () => {
+  mockFetch(() => json({ answer: 'Work for 12 months [1].', sources: SOURCES }))
+  render(<App />)
+  await ask()
+  const answer = screen.getByTestId('answer')
+  expect(answer.querySelector('mark')!.textContent).toBe('12 months')
+  const chip = answer.querySelector('a.chip')!
+  expect(chip.getAttribute('href')).toBe('#src-1')
+  expect(chip.getAttribute('aria-label')).toBe('Source 1')
+  expect(document.getElementById('src-1')).toBeTruthy()
+})
+
+test('restyle b: "8 CFR 214.2(f)(10)" has no time unit, so nothing is highlighted', async () => {
+  mockFetch(() => json({ answer: 'See 8 CFR 214.2(f)(10) for the rule.', sources: SOURCES }))
+  render(<App />)
+  await ask()
+  expect(screen.getByTestId('answer').querySelector('mark')).toBeNull()
+})
+
+test('restyle c: a 120-character question gets the medium headline class', async () => {
+  const question = 'q'.repeat(120)
+  mockFetch(() => json({ answer: 'x', sources: [] }))
+  render(<App />)
+  await ask(question)
+  expect(screen.getByRole('heading', { level: 1 }).className).toContain('h1-md')
+})
+
+test.each([
+  [70, 'h1-lg'],
+  [71, 'h1-md'],
+  [140, 'h1-md'],
+  [141, 'h1-sm'],
+])('restyle c extra: a %i-character question gets %s', async (length, size) => {
+  mockFetch(() => json({ answer: 'x', sources: [] }))
+  render(<App />)
+  await ask('q'.repeat(length))
+  expect(screen.getByRole('heading', { level: 1 }).className).toContain(size)
+})
+
+test.each([
+  ['empty', () => json({ answer: 'x', sources: [] }), false],
+  ['answer', () => json({ answer: 'Up to 90 days [1].', sources: SOURCES }), true],
+  ['refusal', () => json({ answer: 'The provided sources do not contain the answer.', sources: [] }), true],
+  ['error', () => json({}, 503), true],
+])('restyle d: the footer text shows in the %s state', async (_, reply, shouldAsk) => {
+  mockFetch(reply)
+  render(<App />)
+  if (shouldAsk) await ask()
+  expect(screen.getByText(FOOTER)).toBeTruthy()
+})
+
+test('restyle extra: auto-highlight skips links and inline code, and bold text is not wrapped twice', async () => {
+  mockFetch(() => json({ answer: '[90 days](https://example.com) and `12 months` and **30 days** [1].', sources: SOURCES }))
+  render(<App />)
+  await ask()
+  const answer = screen.getByTestId('answer')
+  expect(answer.querySelector('mark')).toBeNull()
+  expect(answer.querySelector('strong')!.textContent).toBe('30 days')
+  expect(answer.querySelectorAll('a.chip')).toHaveLength(1)
+})
+
+test('restyle extra: a comma citation [1, 2] renders one chip per source', async () => {
+  mockFetch(() => json({ answer: 'Both apply [1, 2].', sources: SOURCES }))
+  render(<App />)
+  await ask()
+  const chips = [...screen.getByTestId('answer').querySelectorAll('a.chip')]
+  expect(chips.map((chip) => chip.getAttribute('aria-label'))).toEqual(['Source 1', 'Source 2'])
+})
+
+test('a11y a: each source title starts with a hidden "Source N: " and the visible text is unchanged', async () => {
+  mockFetch(() => json({ answer: 'Both apply [1, 2].', sources: SOURCES }))
+  render(<App />)
+  await ask()
+  screen.getAllByRole('listitem').forEach((row, i) => {
+    const title = row.querySelector('.source-title')!
+    expect(title.querySelector('.sr-only')!.textContent).toBe(`Source ${i + 1}: `)
+    expect(title.firstElementChild!.className).toBe('sr-only')
+  })
+  expect(visibleTitle(screen.getAllByRole('listitem')[0])).toBe('8 CFR 214.2(f)(10)(ii)(E)')
+})
+
+test('a11y b: answer cites [7] with 3 sources -> no link for 7, the number is still shown', async () => {
+  const three = [...SOURCES, { ...SOURCES[0], label: '[3] Third' }]
+  mockFetch(() => json({ answer: 'See [1] and [7].', sources: three }))
+  render(<App />)
+  await ask()
+  const chips = [...screen.getByTestId('answer').querySelectorAll('.chip')]
+  expect(chips.map((chip) => chip.textContent)).toEqual(['1', '7'])
+  expect(chips[0].tagName).toBe('A')
+  expect(chips[1].tagName).toBe('SPAN')
+  expect(chips[1].getAttribute('href')).toBeNull()
+  expect(chips[1].getAttribute('aria-label')).toBeNull()
+})
+
+test('a11y c: the source link aria-label says it opens in a new tab', async () => {
+  mockFetch(() => json({ answer: 'Up to 90 days [1].', sources: SOURCES }))
+  render(<App />)
+  await ask()
+  screen.getAllByRole('listitem').forEach((row) => {
+    expect(row.querySelector('a')!.getAttribute('aria-label')).toContain('opens in a new tab')
+  })
 })

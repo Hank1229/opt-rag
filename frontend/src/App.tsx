@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import Markdown, { type Components } from 'react-markdown'
 import remarkBreaks from 'remark-breaks'
+import remarkAnswerMarks, { CITATION } from './answerMarks'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
@@ -26,22 +27,43 @@ const INTRO = 'Answers from 8 CFR 214.2(f) and Study in the States, with sources
 const HTTP_URL = /^https?:\/\//i
 // Opening words of REFUSAL in app/generation.py; the backend sends sources=[] when nothing was retrieved.
 const REFUSAL_PREFIX = 'The provided sources do not contain the answer'
-
-// Same grammar as LABEL in app/evals/metrics.py, so the page and the eval agree on what is cited.
-const LABEL = /\[(\d+(?:\s*,\s*\d+)*)\]/g
+const DISCLAIMER = "Not legal advice. Check with your school's DSO before you act."
+const LEADING_NUMERAL = /^\[\d+\]\s*/
+const LARGE_HEADLINE_MAX = 70
+const MEDIUM_HEADLINE_MAX = 140
 
 // Source numbers the answer cites as [n] or [n, m], 1-based like the source labels.
 function citedNumbers(answer: string) {
-  return new Set([...answer.matchAll(LABEL)].flatMap((match) => match[1].split(',').map(Number)))
+  return new Set([...answer.matchAll(CITATION)].flatMap((match) => match[1].split(',').map(Number)))
 }
 
 // The answer is model output: links leave in a new tab, and images (dropped below) never load outside URLs.
-const answerComponents: Components = {
-  a: ({ href, children }) => (
-    <a href={href} target="_blank" rel="noopener noreferrer">
-      {children}
-    </a>
-  ),
+// A chip links only to a source that exists in this response; otherwise it is a plain chip.
+function answerComponents(sourceCount: number): Components {
+  return {
+    a: ({ href, children }) => (
+      <a href={href} target="_blank" rel="noopener noreferrer">
+        {children}
+      </a>
+    ),
+    // answerMarks.ts emits <cite> for [n]; its only child is the source number.
+    cite: ({ children }) => {
+      const number = Number(children)
+      if (number < 1 || number > sourceCount) return <span className="chip">{children}</span>
+      return (
+        <a className="chip" href={`#src-${number}`} aria-label={`Source ${number}`}>
+          {children}
+        </a>
+      )
+    },
+    mark: ({ children }) => <mark className="highlight">{children}</mark>,
+  }
+}
+
+// One class per size so the CSS and the tests share the same three tiers.
+function headlineSize(text: string) {
+  if (text.length <= LARGE_HEADLINE_MAX) return 'h1-lg'
+  return text.length <= MEDIUM_HEADLINE_MAX ? 'h1-md' : 'h1-sm'
 }
 
 export default function App() {
@@ -86,84 +108,135 @@ export default function App() {
     }
   }
 
-  return (
-    <main>
-      <h1 className="site-name">F-1 / OPT questions</h1>
-      {state.status === 'idle' && <p className="intro">{INTRO}</p>}
-      <form onSubmit={submit}>
-        <label htmlFor="question">Question</label>
-        <input id="question" value={question} onChange={(e) => setQuestion(e.target.value)} />
-        <button type="submit" disabled={!question.trim() || state.status === 'loading'}>
-          Ask
-        </button>
-      </form>
+  const headline = state.status === 'idle' ? INTRO : state.asked
 
-      {state.status === 'idle' && (
-        <div className="examples">
-          {EXAMPLE_QUESTIONS.map((example) => (
-            <button key={example} type="button" className="example" onClick={() => askExample(example)}>
-              {example}
-            </button>
-          ))}
+  return (
+    <div className="page">
+      <div className="content">
+        <header className="site-header">
+          <span className="brand">opt-rag</span>
+          <span className="header-note">Not legal advice</span>
+        </header>
+        <main>
+          <div className="hero">
+            <h1 className={`headline ${headlineSize(headline)}`}>{headline}</h1>
+            <form onSubmit={submit}>
+              <label htmlFor="question" className="sr-only">
+                Question
+              </label>
+              <input id="question" value={question} onChange={(e) => setQuestion(e.target.value)} />
+              <button type="submit" className="ask" disabled={!question.trim() || state.status === 'loading'}>
+                Ask
+              </button>
+            </form>
+
+            {state.status === 'idle' && (
+              <div className="examples">
+                {EXAMPLE_QUESTIONS.map((example) => (
+                  <button key={example} type="button" className="outline example" onClick={() => askExample(example)}>
+                    {example}
+                  </button>
+                ))}
+              </div>
+            )}
+            {state.status === 'loading' && (
+              <>
+                <p className="status">Searching the regulations...</p>
+                {state.waking && <p className="status">Waking up the server, the first answer can take about 10 s.</p>}
+              </>
+            )}
+          </div>
+          {state.status === 'error' && (
+            <section className="answer-section">
+              <div className="answer-col">
+                <div className="band band-error">
+                  <p role="alert">Something went wrong. Please try again.</p>
+                  <button type="button" className="outline" onClick={() => void ask(state.asked)}>
+                    Try again
+                  </button>
+                </div>
+              </div>
+            </section>
+          )}
+          {state.status === 'answer' && <Reply reply={state.reply} />}
+        </main>
+      </div>
+      <footer className="site-footer">
+        <div className="footer-inner">
+          <InfoIcon />
+          <span>{DISCLAIMER}</span>
         </div>
-      )}
-      {state.status !== 'idle' && <h2 className="asked">{state.asked}</h2>}
-      {state.status === 'loading' && (
-        <>
-          <p className="status">Searching the regulations...</p>
-          {state.waking && <p className="status">Waking up the server, the first answer can take about 10 s.</p>}
-        </>
-      )}
-      {state.status === 'error' && (
-        <div className="band band-error">
-          <p role="alert">Something went wrong. Please try again.</p>
-          <button type="button" onClick={() => void ask(state.asked)}>
-            Try again
-          </button>
-        </div>
-      )}
-      {state.status === 'answer' && <Reply reply={state.reply} />}
-    </main>
+      </footer>
+    </div>
   )
 }
 
 function Reply({ reply }: { reply: Answer }) {
   const is_refusal = reply.sources.length === 0 || reply.answer.trimStart().startsWith(REFUSAL_PREFIX)
   return (
-    <>
-      <div data-testid="answer" className={is_refusal ? 'answer band band-refusal' : 'answer'}>
-        <Markdown remarkPlugins={[remarkBreaks]} components={answerComponents} disallowedElements={['img']}>
-          {reply.answer}
-        </Markdown>
+    <section className="answer-section">
+      <div className="answer-col">
+        <h2 className="sr-only">Answer</h2>
+        <div data-testid="answer" className={is_refusal ? 'answer band band-refusal' : 'answer'}>
+          <Markdown
+            remarkPlugins={[remarkBreaks, remarkAnswerMarks]}
+            components={answerComponents(reply.sources.length)}
+            disallowedElements={['img']}
+          >
+            {reply.answer}
+          </Markdown>
+        </div>
       </div>
       {reply.sources.length > 0 && <Sources sources={reply.sources} cited={citedNumbers(reply.answer)} />}
-    </>
+    </section>
   )
 }
 
 function Sources({ sources, cited }: { sources: Source[]; cited: Set<number> }) {
   return (
-    <section className="sources" aria-label="Sources">
-      <ol>
-        {sources.map((source, i) => (
-          <li key={source.label}>
-            {HTTP_URL.test(source.url) ? (
-              <a href={source.url} target="_blank" rel="noopener">
-                <SourceLabel label={shownLabel(source)} />
-              </a>
-            ) : (
-              <SourceLabel label={shownLabel(source)} />
-            )}{' '}
-            <span className="tier">{TIER_NAMES[source.source_tier] ?? source.source_tier}</span>{' '}
-            {cited.has(i + 1) ? (
-              <span className="citation cited">cited</span>
-            ) : (
-              <span className="citation">retrieved, not cited</span>
-            )}
-          </li>
-        ))}
+    <aside className="sources" aria-label="Sources">
+      <h2>Sources</h2>
+      <ol role="list">
+        {sources.map((source, i) => {
+          const number = i + 1
+          const title = shownLabel(source).replace(LEADING_NUMERAL, '')
+          const tier = TIER_NAMES[source.source_tier] ?? source.source_tier
+          return (
+            <li key={source.label}>
+              <span className={cited.has(number) ? 'numeral' : 'numeral is-uncited'} aria-hidden="true">
+                {number}
+              </span>
+              <div className="source-body">
+                <p className="source-title" id={`src-${number}`}>
+                  <span className="sr-only">Source {number}: </span>
+                  {title}
+                </p>
+                <p className="source-meta">
+                  <span className="tier">{tier}</span>{' '}
+                  {cited.has(number) ? (
+                    <span className="citation cited">cited</span>
+                  ) : (
+                    <span className="citation">retrieved, not cited</span>
+                  )}
+                </p>
+                {HTTP_URL.test(source.url) && (
+                  <a
+                    className="source-link"
+                    href={source.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={`Open on ${tier}: ${title}, opens in a new tab`}
+                  >
+                    Open on {tier}
+                    <ExternalIcon />
+                  </a>
+                )}
+              </div>
+            </li>
+          )
+        })}
       </ol>
-    </section>
+    </aside>
   )
 }
 
@@ -174,13 +247,19 @@ function shownLabel(source: Source) {
   return `${numeral} ${source.title}`.trim()
 }
 
-// The leading "[n]" becomes a red numeral; the link text stays exactly the label.
-function SourceLabel({ label }: { label: string }) {
-  const [, numeral, rest] = label.match(/^(\[\d+\])(.*)$/s) ?? [null, '', label]
+function InfoIcon() {
   return (
-    <>
-      <span className="numeral">{numeral}</span>
-      {rest}
-    </>
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 16v-4M12 8h.01" />
+    </svg>
+  )
+}
+
+function ExternalIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
+    </svg>
   )
 }
