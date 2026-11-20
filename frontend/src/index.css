@@ -393,7 +393,44 @@ button {
   flex: none;
 }
 
+/* Empty state only: the hero is one centered 780px block; on wide screens it sits slightly above the vertical center. */
+.is-empty .hero {
+  max-width: 780px;
+  margin: 0 auto;
+}
+
+.is-empty .headline {
+  text-align: center;
+}
+
+.is-empty .examples {
+  flex-direction: column;
+}
+
+@media (min-width: 641px) {
+  .is-empty .content {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .is-empty main {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    justify-content: center;
+    padding-bottom: 6vh;
+  }
+
+  .is-empty .hero {
+    padding-top: 0;
+  }
+}
+
 @media (max-width: 640px) {
+  .is-empty .headline {
+    text-align: left;
+  }
+
   .content {
     padding: 0 20px;
   }

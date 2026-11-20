@@ -111,7 +111,7 @@ export default function App() {
   const headline = state.status === 'idle' ? INTRO : state.asked
 
   return (
-    <div className="page">
+    <div className={state.status === 'idle' ? 'page is-empty' : 'page'}>
       <div className="content">
         <header className="site-header">
           <span className="brand">opt-rag</span>

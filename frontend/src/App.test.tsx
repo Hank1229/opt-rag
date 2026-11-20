@@ -647,3 +647,11 @@ test('a11y c: the source link aria-label says it opens in a new tab', async () =
     expect(row.querySelector('a')!.getAttribute('aria-label')).toContain('opens in a new tab')
   })
 })
+
+test('centered a: the empty state has the is-empty class on the page and the answer state does not', async () => {
+  mockFetch(() => json({ answer: 'Up to 90 days [1].', sources: SOURCES }))
+  const { container } = render(<App />)
+  expect(container.querySelector('.page')!.classList.contains('is-empty')).toBe(true)
+  await ask()
+  expect(container.querySelector('.page')!.classList.contains('is-empty')).toBe(false)
+})
