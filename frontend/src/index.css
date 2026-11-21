@@ -128,21 +128,25 @@ input:focus-visible {
   margin: 0;
   font-family: var(--display);
   font-weight: 600;
-  line-height: 1.06;
-  letter-spacing: -0.02em;
   overflow-wrap: break-word;
 }
 
 .h1-lg {
   font-size: 60px;
+  line-height: 1.06;
+  letter-spacing: -0.02em;
 }
 
 .h1-md {
   font-size: 40px;
+  line-height: 1.15;
+  letter-spacing: -0.015em;
 }
 
 .h1-sm {
-  font-size: 30px;
+  font-size: 26px;
+  line-height: 1.3;
+  letter-spacing: -0.005em;
 }
 
 form {
@@ -241,8 +245,8 @@ button {
 .answer-col {
   flex: 7 1 460px;
   min-width: 0;
-  max-width: 56ch;
-  font: 400 25px/1.58 var(--display);
+  max-width: 62ch;
+  font: 400 21px/1.65 var(--display);
 }
 
 .answer > * {
@@ -250,7 +254,42 @@ button {
 }
 
 .answer > * + * {
-  margin-top: 22px;
+  margin-top: 16px;
+}
+
+.answer ul,
+.answer ol {
+  padding-left: 1.3em;
+}
+
+.answer li + li {
+  margin-top: 8px;
+}
+
+.answer li > ul,
+.answer li > ol {
+  margin-top: 6px;
+}
+
+.answer h3,
+.answer h4 {
+  font-weight: 600;
+}
+
+.answer h3 {
+  margin: 32px 0 10px;
+  font-size: 24px;
+  line-height: 1.25;
+}
+
+.answer h4 {
+  margin: 22px 0 8px;
+  font-size: 21px;
+  line-height: 1.3;
+}
+
+.answer > :first-child {
+  margin-top: 0;
 }
 
 /* Highlighter underlay: the marker covers the lower part of the line. */
@@ -264,25 +303,28 @@ button {
   box-decoration-break: clone;
 }
 
+.answer strong.label {
+  padding: 0;
+  background: none;
+}
+
 .highlight {
   white-space: nowrap;
 }
 
+.chip + .chip {
+  margin-left: 2px;
+}
+
+/* Plain inline (not inline-flex): an atomic inline allows a line break in front of it, an inline box does not. */
 .chip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 22px;
-  height: 22px;
-  box-sizing: border-box;
-  margin: 0 0 0 6px;
-  padding: 0 6px;
+  margin-left: 6px;
+  padding: 2.5px 7px;
   font: 600 13px/1 var(--ui);
   color: var(--teal);
   text-decoration: none;
   background: var(--chip);
   border-radius: 5px;
-  vertical-align: 3px;
 }
 
 .chip:hover {
@@ -295,8 +337,8 @@ button {
 }
 
 .band-refusal {
-  font-size: 22px;
-  line-height: 1.5;
+  font-size: 21px;
+  line-height: 1.6;
   background: var(--white);
   border: 1px solid var(--rule);
   border-left: 4px solid var(--teal);
@@ -442,16 +484,36 @@ button {
 
   .h1-lg {
     font-size: 36px;
+    line-height: 1.1;
   }
 
-  .h1-md,
-  .h1-sm {
+  .h1-md {
     font-size: 28px;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+  }
+
+  .h1-sm {
+    font-size: 22px;
+    letter-spacing: 0;
   }
 
   .answer-col {
-    font-size: 21px;
+    font-size: 19px;
+    line-height: 1.6;
+  }
+
+  .band-refusal {
+    font-size: 19px;
     line-height: 1.55;
+  }
+
+  .answer h3 {
+    font-size: 21px;
+  }
+
+  .answer h4 {
+    font-size: 19px;
   }
 
   .numeral {

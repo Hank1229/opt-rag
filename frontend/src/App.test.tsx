@@ -95,7 +95,7 @@ test('3: answer on top, sources below in response order with label, tier tag, an
     body: JSON.stringify({ question: QUESTION }),
   })
   const answer = screen.getByTestId('answer')
-  expect(answer.textContent).toBe('Up to 90 days 1.')
+  expect(answer.textContent).toBe('Up to 90 days1.')
 
   const rows = screen.getAllByRole('listitem')
   expect(rows).toHaveLength(2)
@@ -144,7 +144,7 @@ test('extra: a new question after an error clears the error', async () => {
   fetch.mockImplementation(() => json({ answer: 'Up to 90 days [1].', sources: SOURCES }))
   await ask()
   expect(screen.queryByRole('alert')).toBeNull()
-  expect(screen.getByTestId('answer').textContent).toBe('Up to 90 days 1.')
+  expect(screen.getByTestId('answer').textContent).toBe('Up to 90 days1.')
 })
 
 // Step 13
@@ -230,7 +230,7 @@ test('S13-2 extra, F1b: adjacent citations [2][4], the prompt\'s documented form
   render(<App />)
   await ask()
   expect(markers()).toEqual(['retrieved, not cited', 'cited', 'retrieved, not cited', 'cited', 'retrieved, not cited'])
-  expect(screen.getByTestId('answer').textContent).toBe('Both apply 24.')
+  expect(screen.getByTestId('answer').textContent).toBe('Both apply24.')
   expect([...screen.getByTestId('answer').querySelectorAll('a.chip')].map((chip) => chip.getAttribute('href'))).toEqual(['#src-2', '#src-4'])
 })
 
@@ -388,7 +388,7 @@ test('polish extra: Try again resends the question and shows the answer', async 
   await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Try again' })))
   expect(queryCalls(fetch)).toHaveLength(2)
   expect(screen.queryByRole('alert')).toBeNull()
-  expect(screen.getByTestId('answer').textContent).toBe('Up to 90 days 1.')
+  expect(screen.getByTestId('answer').textContent).toBe('Up to 90 days1.')
 })
 
 test('polish extra: unreachable API shows the red error band, and Try again resends the same question', async () => {
@@ -612,6 +612,36 @@ test('restyle extra: a comma citation [1, 2] renders one chip per source', async
   await ask()
   const chips = [...screen.getByTestId('answer').querySelectorAll('a.chip')]
   expect(chips.map((chip) => chip.getAttribute('aria-label'))).toEqual(['Source 1', 'Source 2'])
+})
+
+test('typography a: a bold label ending in ":" has no marker class, while "10 years" is still highlighted', async () => {
+  mockFetch(() => json({ answer: '- **Degree Level:** Master for 10 years [1].\n\n**Important** note', sources: SOURCES }))
+  render(<App />)
+  await ask()
+  const answer = screen.getByTestId('answer')
+  const [label, other] = answer.querySelectorAll('strong')
+  expect(label.className).toBe('label')
+  expect(other.className).toBe('')
+  expect(answer.querySelector('mark')!.textContent).toBe('10 years')
+})
+
+test('typography b: a markdown "## Title" renders as an h3, and "#### Title" as an h4', async () => {
+  mockFetch(() => json({ answer: '## Title\n\n#### Small [1]', sources: SOURCES }))
+  render(<App />)
+  await ask()
+  const answer = screen.getByTestId('answer')
+  expect(answer.querySelector('h3')!.textContent).toBe('Title')
+  expect(answer.querySelector('h4')!.textContent).toBe('Small1')
+  expect(answer.querySelector('h2')).toBeNull()
+})
+
+test('typography c: no whitespace before or between chips, also after bold and highlighted text', async () => {
+  mockFetch(() => json({ answer: 'See the rule [1] [2].\n\nFor **one full year** [1][2] or 12 months [3].', sources: SOURCES }))
+  render(<App />)
+  await ask()
+  const answer = screen.getByTestId('answer')
+  expect(answer.textContent).toBe('See the rule12.\nFor one full year12 or 12 months3.')
+  expect(answer.querySelectorAll('.chip')).toHaveLength(5)
 })
 
 test('a11y a: each source title starts with a hidden "Source N: " and the visible text is unchanged', async () => {

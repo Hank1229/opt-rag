@@ -1,5 +1,5 @@
 // Single-page question form: posts to the FastAPI /query endpoint and shows the answer and its sources.
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { Children, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import Markdown, { type Components } from 'react-markdown'
 import remarkBreaks from 'remark-breaks'
 import remarkAnswerMarks, { CITATION } from './answerMarks'
@@ -57,7 +57,21 @@ function answerComponents(sourceCount: number): Components {
       )
     },
     mark: ({ children }) => <mark className="highlight">{children}</mark>,
+    // The page h1 is the question and the h2s are Answer and Sources, so answer headings start at h3.
+    h1: ({ children }) => <h3>{children}</h3>,
+    h2: ({ children }) => <h3>{children}</h3>,
+    h3: ({ children }) => <h3>{children}</h3>,
+    h4: ({ children }) => <h4>{children}</h4>,
+    h5: ({ children }) => <h4>{children}</h4>,
+    h6: ({ children }) => <h4>{children}</h4>,
+    // "Timeframe:" style list labels stay bold but get no marker.
+    strong: ({ children }) => (is_label(children) ? <strong className="label">{children}</strong> : <strong>{children}</strong>),
   }
+}
+
+function is_label(children: ReactNode) {
+  const last = Children.toArray(children).at(-1)
+  return typeof last === 'string' && last.trimEnd().endsWith(':')
 }
 
 // One class per size so the CSS and the tests share the same three tiers.

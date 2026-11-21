@@ -6,7 +6,8 @@ export const CITATION = /\[(\d+(?:\s*,\s*\d+)*)\]/g
 const TIME_AMOUNT = /\b\d+(?:\.\d+)?\s?(?:day|month|week|year)s?\b/i
 const CITATION_OR_AMOUNT = new RegExp(`${CITATION.source}|(${TIME_AMOUNT.source})`, 'gi')
 
-type MdNode = { type: string; value?: string; children?: MdNode[]; data?: { hName: string } }
+type MdNode = { type: string; value?: string; children?: MdNode[]; data?: { hName: string; hProperties?: { className: string[] } } }
+
 
 const text = (value: string): MdNode => ({ type: 'text', value })
 
@@ -29,14 +30,23 @@ function markChildren(node: MdNode, withAmounts: boolean) {
   })
 }
 
+// Whitespace before a chip is dropped: with none before or between chips there is no line-break opportunity in front of one.
 function markText(value: string, withAmounts: boolean): MdNode[] {
   const pieces: MdNode[] = []
   let end = 0
   for (const match of value.matchAll(withAmounts ? CITATION_OR_AMOUNT : CITATION)) {
     if (match.index > end) pieces.push(text(value.slice(end, match.index)))
+    if (match[1]) trimLastText(pieces)
     pieces.push(...(match[1] ? match[1].split(',').map((n) => chip(n.trim())) : [highlight(match[0])]))
     end = match.index + match[0].length
   }
   if (end < value.length) pieces.push(text(value.slice(end)))
   return pieces
+}
+
+function trimLastText(pieces: MdNode[]) {
+  const last = pieces.at(-1)
+  if (last?.type !== 'text') return
+  last.value = last.value!.trimEnd()
+  if (!last.value) pieces.pop()
 }
